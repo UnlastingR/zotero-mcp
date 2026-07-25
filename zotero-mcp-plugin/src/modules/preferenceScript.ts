@@ -2645,28 +2645,54 @@ export function initStandaloneIndexManager(doc: Document) {
 
   const win = doc.defaultView || (globalThis as any).window;
   const statusMap = new Map<string, number>();
-  let itemListCache: Array<{ key: string; title: string }> = [];
+  interface ItemCacheMeta {
+    key: string;
+    item?: any;
+    title?: string;
+    collectionPath?: string;
+  }
+  let itemListCache: ItemCacheMeta[] = [];
   let currentPage = 1;
   const pageSize = 15;
 
-  const collectionPathCache = new Map<string, string>();
-  function getCollectionPath(itemKey: string): string {
-    if (collectionPathCache.has(itemKey))
-      return collectionPathCache.get(itemKey)!;
+  function getItemTitle(itemMeta: ItemCacheMeta): string {
+    if (itemMeta.title) return itemMeta.title;
+    let t = "未命名文献";
     try {
-      const item = Zotero.Items.getByLibraryAndKey(1, itemKey);
-      if (!item) return "-";
+      const item =
+        itemMeta.item || Zotero.Items.getByLibraryAndKey(1, itemMeta.key);
+      if (item) {
+        t = item.getDisplayTitle
+          ? item.getDisplayTitle() || "未命名文献"
+          : item.getField
+            ? item.getField("title") || "未命名文献"
+            : "未命名文献";
+      }
+    } catch (_) {}
+    itemMeta.title = t;
+    return t;
+  }
+
+  function getCollectionPath(itemMeta: ItemCacheMeta): string {
+    if (itemMeta.collectionPath !== undefined) return itemMeta.collectionPath;
+    try {
+      const item =
+        itemMeta.item || Zotero.Items.getByLibraryAndKey(1, itemMeta.key);
+      if (!item) {
+        itemMeta.collectionPath = "-";
+        return "-";
+      }
       const collections = item.getCollections();
       if (!collections || collections.length === 0) {
-        collectionPathCache.set(itemKey, "未分类");
+        itemMeta.collectionPath = "未分类";
         return "未分类";
       }
       const col = Zotero.Collections.get(collections[0]);
-      if (!col) return "-";
-      const path = col.name;
-      collectionPathCache.set(itemKey, path);
-      return path;
+      const resName: string = col && col.name ? col.name : "-";
+      itemMeta.collectionPath = resName;
+      return resName;
     } catch (_) {
+      itemMeta.collectionPath = "-";
       return "-";
     }
   }
@@ -2690,13 +2716,7 @@ export function initStandaloneIndexManager(doc: Document) {
       const items = (await Zotero.Items.getAll(1, true)) || [];
       for (const item of items) {
         if (item && (item.isRegularItem() || item.isPDFAttachment())) {
-          let title = "未命名文献";
-          try {
-            title =
-              item.getDisplayTitle() ||
-              (item.getField ? item.getField("title") : "未命名文献");
-          } catch (_) {}
-          itemListCache.push({ key: item.key, title });
+          itemListCache.push({ key: item.key, item });
         }
       }
     } catch (_) {}
@@ -2715,19 +2735,20 @@ export function initStandaloneIndexManager(doc: Document) {
     const query = searchInput?.value.toLowerCase().trim() || "";
     const statusFilter = filterSelect?.value || "all";
 
-    const filtered = itemListCache.filter((item) => {
-      const chunkCount = statusMap.get(item.key) || 0;
+    const filtered = itemListCache.filter((itemMeta) => {
+      const chunkCount = statusMap.get(itemMeta.key) || 0;
       const isIndexed = chunkCount > 0;
 
       if (statusFilter === "indexed" && !isIndexed) return false;
       if (statusFilter === "unindexed" && isIndexed) return false;
 
       if (query) {
-        const colPath = getCollectionPath(item.key).toLowerCase();
+        const title = getItemTitle(itemMeta).toLowerCase();
+        const colPath = getCollectionPath(itemMeta).toLowerCase();
         return (
-          item.title.toLowerCase().includes(query) ||
+          title.includes(query) ||
           colPath.includes(query) ||
-          item.key.toLowerCase().includes(query)
+          itemMeta.key.toLowerCase().includes(query)
         );
       }
       return true;
@@ -2749,22 +2770,23 @@ export function initStandaloneIndexManager(doc: Document) {
     }
 
     let html = "";
-    for (const item of pageItems) {
-      const chunkCount = statusMap.get(item.key) || 0;
+    for (const itemMeta of pageItems) {
+      const chunkCount = statusMap.get(itemMeta.key) || 0;
       const isIndexed = chunkCount > 0;
-      const colPath = getCollectionPath(item.key);
+      const title = getItemTitle(itemMeta);
+      const colPath = getCollectionPath(itemMeta);
 
       const statusBadge = isIndexed
         ? `<span class="badge badge-success">✓ 已索引</span>`
         : `<span class="badge badge-gray">- 未索引</span>`;
 
       const actionBtn = isIndexed
-        ? `<button class="mgr-btn mgr-btn-danger" data-act="clear" data-key="${item.key}" style="padding:3px 8px; font-size:11px;">清除</button>`
-        : `<button class="mgr-btn mgr-btn-primary" data-act="reindex" data-key="${item.key}" style="padding:3px 8px; font-size:11px;">索引</button>`;
+        ? `<button class="mgr-btn mgr-btn-danger" data-act="clear" data-key="${itemMeta.key}" style="padding:3px 8px; font-size:11px;">清除</button>`
+        : `<button class="mgr-btn mgr-btn-primary" data-act="reindex" data-key="${itemMeta.key}" style="padding:3px 8px; font-size:11px;">索引</button>`;
 
       html += `
         <tr>
-          <td style="font-weight:500;" title="${item.title}">${item.title}</td>
+          <td style="font-weight:500;" title="${title}">${title}</td>
           <td style="color:var(--text-2);" title="${colPath}">${colPath}</td>
           <td style="text-align:center;">${statusBadge}</td>
           <td style="text-align:center; font-family:monospace;">${chunkCount}</td>
