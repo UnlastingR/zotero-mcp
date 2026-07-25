@@ -1,6 +1,7 @@
 import { config } from "../../package.json";
 import { getString } from "../utils/locale";
 import { ClientConfigGenerator } from "./clientConfigGenerator";
+import { appendMcpLog, getMcpMemoryLogs } from "../utils/mcpLogger";
 
 export async function registerPrefsScripts(_window: Window) {
   // This function is called when the prefs window is opened
@@ -2648,6 +2649,12 @@ export function initStandaloneIndexManager(doc: Document) {
   const btnNext = doc.querySelector("#mgr-btn-next") as HTMLButtonElement;
   const summaryText = doc.querySelector("#mgr-stats-summary") as HTMLElement;
 
+  const btnToggleLogs = doc.querySelector(
+    "#mgr-btn-toggle-logs",
+  ) as HTMLButtonElement;
+  const logConsole = doc.querySelector("#mgr-log-console") as HTMLElement;
+  const logContent = doc.querySelector("#mgr-log-content") as HTMLElement;
+
   if (!tbody) return;
 
   const win = doc.defaultView || (globalThis as any).window;
@@ -2665,11 +2672,21 @@ export function initStandaloneIndexManager(doc: Document) {
   }
 
   function debugLog(msg: string, level = "info") {
-    const text = `[IndexManager] ${msg}`;
-    console.log(text);
-    if (typeof ztoolkit !== "undefined") {
-      ztoolkit.log(text, level as any);
+    appendMcpLog(msg, level);
+    if (logContent) {
+      logContent.textContent = getMcpMemoryLogs().slice(-50).join("\n");
+      if (logConsole) logConsole.scrollTop = logConsole.scrollHeight;
     }
+  }
+
+  if (btnToggleLogs && logConsole) {
+    btnToggleLogs.addEventListener("click", () => {
+      const current = logConsole.style.display;
+      logConsole.style.display = current === "none" ? "block" : "none";
+      if (logContent) {
+        logContent.textContent = getMcpMemoryLogs().slice(-50).join("\n");
+      }
+    });
   }
 
   const statusMap = new Map<string, number>();

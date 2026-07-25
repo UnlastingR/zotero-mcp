@@ -193,9 +193,18 @@
         <html:option value="indexed">已构建索引</html:option>
         <html:option value="unindexed">未构建索引</html:option>
       </html:select>
+      <html:button class="mgr-btn" id="mgr-btn-toggle-logs">📜 调试日志终端</html:button>
       <html:button class="mgr-btn" id="mgr-btn-refresh">🔄 刷新列表</html:button>
       <html:button class="mgr-btn mgr-btn-primary" id="mgr-btn-reindex-all">⚡ 批量构建全库</html:button>
       <html:button class="mgr-btn mgr-btn-danger" id="mgr-btn-clear-all">🗑️ 清空所有向量</html:button>
+    </html:div>
+
+    <!-- Log Console Window (Hidden by default, toggleable) -->
+    <html:div id="mgr-log-console" style="display:none; background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:var(--r); font-family:monospace; font-size:12px; height:180px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; border:1px solid #333;">
+      <html:div style="color:#4ec9b0; margin-bottom:6px; font-weight:600; display:flex; justify-space-between;">
+        <html:span>=== Zotero MCP 实时日志输出 === (日志同步存至 F:\Mine\zotero\zotero-mcp-debug.log)</html:span>
+      </html:div>
+      <html:div id="mgr-log-content">等待刷新日志...</html:div>
     </html:div>
 
     <!-- Table -->
