@@ -760,6 +760,74 @@
         </html:div>
       </html:div>
 
+        <!-- Doc2X & Bilingual Noise Filter Section -->
+        <html:div class="zmp-s">
+          <html:div class="zmp-s-title">Doc2X 中英双语 / 翻译去噪</html:div>
+          <html:div class="zmp-s-desc">自动检测并过滤 Doc2X 等工具生成的翻译章节与黑名单段落，仅为纯英文原文构建向量索引。</html:div>
+          
+          <html:div class="zmp-sw">
+            <html:div>
+              <html:div class="zmp-sw-text">启用 Doc2X 翻译去噪</html:div>
+              <html:div class="zmp-sw-sub">分块时自动跳过匹配黑名单关键词的译文块与全篇翻译章节</html:div>
+            </html:div>
+            <html:label class="zmp-tog">
+              <html:input type="checkbox" id="zotero-prefpane-__addonRef__-semantic-bilingualFilter" />
+              <html:span class="zmp-tog-track"></html:span>
+            </html:label>
+          </html:div>
+
+          <html:div class="zmp-fg">
+            <html:label class="zmp-fl">黑名单模式与关键词（支持正则表达式/关键词，多个用逗号或换行分隔）</html:label>
+            <html:textarea id="zotero-prefpane-__addonRef__-semantic-blacklistPatterns" class="zmp-fi zmp-fi-l zmp-fi-mono" style="height:54px; resize:vertical;"></html:textarea>
+            <html:div class="zmp-fh">默认排除：_translated, _zh, _cn, (中文), (翻译), [翻译], [译文], 中文翻译, 译文</html:div>
+          </html:div>
+        </html:div>
+
+        <!-- Index Manager Table Section (Zero-lag Paginated UI) -->
+        <html:div class="zmp-s">
+          <html:div class="zmp-s-title">全局语义索引状态明细管理</html:div>
+          <html:div class="zmp-s-desc">查看全库文献的向量索引构建状态、所属 Collection 路径，支持搜索与批量构建/清除。</html:div>
+          
+          <!-- Toolbar -->
+          <html:div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
+            <html:input type="text" id="zmp-idx-search" class="zmp-fi" placeholder="搜索文献标题 / PDF文件名 / Collection..." style="flex:1; min-width:200px;" />
+            <html:select id="zmp-idx-filter-status" class="zmp-fi" style="width:110px;">
+              <html:option value="all">全部状态</html:option>
+              <html:option value="indexed">已索引</html:option>
+              <html:option value="unindexed">未索引</html:option>
+            </html:select>
+            <html:button class="zmp-b" id="zmp-idx-btn-refresh">刷新</html:button>
+            <html:button class="zmp-b zmp-bp" id="zmp-idx-btn-reindex-all">批量构建索引</html:button>
+            <html:button class="zmp-b zmp-bd" id="zmp-idx-btn-clear-all">批量清除向量</html:button>
+          </html:div>
+
+          <!-- Index Status Table -->
+          <html:div style="border:1px solid var(--border); border-radius:var(--r); overflow:hidden; max-height:360px; overflow-y:auto; background:var(--bg);">
+            <html:table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+              <html:thead style="background:var(--bg-muted); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:1;">
+                <html:tr>
+                  <html:th style="padding:8px 12px; font-weight:600; color:var(--text-2);">文献 / PDF 文件名</html:th>
+                  <html:th style="padding:8px 12px; font-weight:600; color:var(--text-2); width:180px;">所属 Collection 路径</html:th>
+                  <html:th style="padding:8px 12px; font-weight:600; color:var(--text-2); width:90px; text-align:center;">索引状态</html:th>
+                  <html:th style="padding:8px 12px; font-weight:600; color:var(--text-2); width:110px; text-align:right;">操作</html:th>
+                </html:tr>
+              </html:thead>
+              <html:tbody id="zmp-idx-tbody">
+                <!-- Rows dynamically injected by JS -->
+              </html:tbody>
+            </html:table>
+          </html:div>
+
+          <!-- Pagination Bar -->
+          <html:div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px; color:var(--text-2);">
+            <html:span id="zmp-idx-pagination-info">加载中...</html:span>
+            <html:div style="display:flex; gap:6px;">
+              <html:button class="zmp-b" id="zmp-idx-btn-prev" style="padding:4px 10px;">上一页</html:button>
+              <html:button class="zmp-b" id="zmp-idx-btn-next" style="padding:4px 10px;">下一页</html:button>
+            </html:div>
+          </html:div>
+        </html:div>
+
     </html:div><!-- /server-dependent-content -->
 
     <!-- ⑤ Footer -->
