@@ -2,7 +2,10 @@ import { BasicExampleFactory } from "./modules/examples";
 import { httpServer } from "./modules/httpServer"; // 使用单例导出
 import { serverPreferences } from "./modules/serverPreferences";
 import { getString, initLocale } from "./utils/locale";
-import { registerPrefsScripts } from "./modules/preferenceScript";
+import {
+  registerPrefsScripts,
+  initStandaloneIndexManager,
+} from "./modules/preferenceScript";
 import { createZToolkit } from "./utils/ztoolkit";
 import { MCPSettingsService } from "./modules/mcpSettingsService";
 import {
@@ -433,6 +436,12 @@ function unregisterItemNotifier() {
 }
 
 async function onStartup() {
+  try {
+    if (typeof Zotero !== "undefined" && (Zotero as any).ZoteroMCP) {
+      (Zotero as any).ZoteroMCP.initStandaloneIndexManager =
+        initStandaloneIndexManager;
+    }
+  } catch (_) {}
   // 进程诊断 - 检测当前运行在哪个进程中
   try {
     const runtime = (Cc as any)["@mozilla.org/xre/app-info;1"]?.getService(

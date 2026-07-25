@@ -11,6 +11,13 @@ export async function registerPrefsScripts(_window: Window) {
 
   addon.data.prefs = { window: _window };
 
+  try {
+    if (typeof Zotero !== "undefined" && (Zotero as any).ZoteroMCP) {
+      (Zotero as any).ZoteroMCP.initStandaloneIndexManager =
+        initStandaloneIndexManager;
+    }
+  } catch (_) {}
+
   // 诊断当前偏好设置状态
   try {
     const currentEnabled = Zotero.Prefs.get(
@@ -2644,6 +2651,27 @@ export function initStandaloneIndexManager(doc: Document) {
   if (!tbody) return;
 
   const win = doc.defaultView || (globalThis as any).window;
+
+  function getZoteroGlobal(): any {
+    if (typeof Zotero !== "undefined" && Zotero.Items) return Zotero;
+    if (win?.opener?.Zotero) return win.opener.Zotero;
+    if (typeof Services !== "undefined" && (Services as any).wm) {
+      const mainWin = (Services as any).wm.getMostRecentWindow(
+        "navigator:browser",
+      );
+      if (mainWin && mainWin.Zotero) return mainWin.Zotero;
+    }
+    return null;
+  }
+
+  function debugLog(msg: string, level = "info") {
+    const text = `[IndexManager] ${msg}`;
+    console.log(text);
+    if (typeof ztoolkit !== "undefined") {
+      ztoolkit.log(text, level as any);
+    }
+  }
+
   const statusMap = new Map<string, number>();
   interface ItemCacheMeta {
     key: string;
@@ -2659,8 +2687,12 @@ export function initStandaloneIndexManager(doc: Document) {
     if (itemMeta.title) return itemMeta.title;
     let t = "未命名文献";
     try {
+      const zotero = getZoteroGlobal();
       const item =
-        itemMeta.item || Zotero.Items.getByLibraryAndKey(1, itemMeta.key);
+        itemMeta.item ||
+        (zotero?.Items
+          ? zotero.Items.getByLibraryAndKey(1, itemMeta.key)
+          : null);
       if (item) {
         t = item.getDisplayTitle
           ? item.getDisplayTitle() || "未命名文献"
@@ -2676,8 +2708,12 @@ export function initStandaloneIndexManager(doc: Document) {
   function getCollectionPath(itemMeta: ItemCacheMeta): string {
     if (itemMeta.collectionPath !== undefined) return itemMeta.collectionPath;
     try {
+      const zotero = getZoteroGlobal();
       const item =
-        itemMeta.item || Zotero.Items.getByLibraryAndKey(1, itemMeta.key);
+        itemMeta.item ||
+        (zotero?.Items
+          ? zotero.Items.getByLibraryAndKey(1, itemMeta.key)
+          : null);
       if (!item) {
         itemMeta.collectionPath = "-";
         return "-";
@@ -2687,7 +2723,9 @@ export function initStandaloneIndexManager(doc: Document) {
         itemMeta.collectionPath = "未分类";
         return "未分类";
       }
-      const col = Zotero.Collections.get(collections[0]);
+      const col = zotero?.Collections
+        ? zotero.Collections.get(collections[0])
+        : null;
       const resName: string = col && col.name ? col.name : "-";
       itemMeta.collectionPath = resName;
       return resName;
@@ -2698,37 +2736,67 @@ export function initStandaloneIndexManager(doc: Document) {
   }
 
   async function loadData() {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-3);">正在刷新向量索引与文献元数据...</td></tr>`;
-
-    statusMap.clear();
-    const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch?.vectorStore;
-    if (vectorStore?.getAllItemVectorStatus) {
-      try {
-        const stats = await vectorStore.getAllItemVectorStatus();
-        for (const s of stats || []) {
-          statusMap.set(s.itemKey, s.chunkCount);
-        }
-      } catch (_) {}
+    debugLog("loadData() started");
+    const zotero = getZoteroGlobal();
+    if (!zotero) {
+      debugLog(
+        "ERROR: Zotero global object NOT found in window context!",
+        "error",
+      );
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#ef4444; font-weight:600;">无法连接到 Zotero 主程序上下文！请尝试重新打开管理窗口。</td></tr>`;
+      }
+      if (summaryText) summaryText.textContent = "连接 Zotero 失败";
+      return;
     }
 
-    itemListCache = [];
     try {
-      const items = (await Zotero.Items.getAll(1, true)) || [];
+      debugLog("Fetching vector status from VectorStore...");
+      statusMap.clear();
+      const vectorStore = zotero.ZoteroMCP?.semanticSearch?.vectorStore;
+      if (vectorStore?.getAllItemVectorStatus) {
+        try {
+          const stats = await vectorStore.getAllItemVectorStatus();
+          debugLog(`Fetched ${stats?.length || 0} vector status records`);
+          for (const s of stats || []) {
+            statusMap.set(s.itemKey, s.chunkCount);
+          }
+        } catch (vErr) {
+          debugLog(`VectorStore query error: ${vErr}`, "error");
+        }
+      } else {
+        debugLog("VectorStore instance not ready or not enabled yet", "warn");
+      }
+
+      debugLog("Fetching Zotero Items via zotero.Items.getAll(1, true)...");
+      itemListCache = [];
+      const items = (await zotero.Items.getAll(1, true)) || [];
+      debugLog(`zotero.Items.getAll() returned ${items.length} items`);
+
       for (const item of items) {
         if (item && (item.isRegularItem() || item.isPDFAttachment())) {
           itemListCache.push({ key: item.key, item });
         }
       }
-    } catch (_) {}
 
-    if (summaryText) {
-      const indexedCount = Array.from(statusMap.values()).filter(
-        (v) => v > 0,
-      ).length;
-      summaryText.textContent = `已索引: ${indexedCount} / ${itemListCache.length} 条文献`;
+      debugLog(
+        `Filtered ${itemListCache.length} regular/pdf items for index table`,
+      );
+
+      if (summaryText) {
+        const indexedCount = Array.from(statusMap.values()).filter(
+          (v) => v > 0,
+        ).length;
+        summaryText.textContent = `已索引: ${indexedCount} / ${itemListCache.length} 条文献`;
+      }
+
+      render();
+    } catch (err: any) {
+      debugLog(`Critical error in loadData(): ${err?.stack || err}`, "error");
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:#ef4444; font-weight:600;">加载失败: ${err?.message || err}</td></tr>`;
+      }
     }
-
-    render();
   }
 
   function render() {

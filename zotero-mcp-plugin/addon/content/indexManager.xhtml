@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <?xml-stylesheet href="chrome://global/skin/" type="text/css"?>
-<?xml-stylesheet href="chrome://zotero-mcp-plugin/content/zoteroPane.css" type="text/css"?>
+<?xml-stylesheet href="chrome://__addonRef__/content/zoteroPane.css" type="text/css"?>
 
 <window
   id="zotero-mcp-index-manager-window"
@@ -228,5 +228,21 @@
     </html:div>
   </html:div>
 
-  <script type="application/javascript" src="chrome://zotero-mcp-plugin/content/scripts/zotero-mcp-plugin.js" />
+  <script type="application/javascript" src="chrome://__addonRef__/content/scripts/__addonRef__.js" />
+  <script type="application/javascript">
+    <![CDATA[
+    window.addEventListener("load", () => {
+      try {
+        const mainWin = window.opener || (typeof Services !== "undefined" && Services.wm && Services.wm.getMostRecentWindow("navigator:browser"));
+        const zotero = window.Zotero || mainWin?.Zotero;
+        const mcpModule = zotero?.ZoteroMCP || window.ZoteroMCP;
+        if (mcpModule?.initStandaloneIndexManager) {
+          mcpModule.initStandaloneIndexManager(document);
+        }
+      } catch (e) {
+        console.error("[IndexManager] Load hook error:", e);
+      }
+    });
+    ]]>
+  </script>
 </window>
