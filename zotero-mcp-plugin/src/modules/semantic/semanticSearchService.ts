@@ -15,7 +15,11 @@ import {
   EmbeddingErrorType,
 } from "./embeddingService";
 import { getVectorStore, VectorStore } from "./vectorStore";
-import { getTextChunker, TextChunker } from "./textChunker";
+import {
+  getTextChunker,
+  TextChunker,
+  BilingualNoiseCleaner,
+} from "./textChunker";
 import { TextFormatter } from "../textFormatter";
 import { PDFProcessor } from "../pdfProcessor";
 
@@ -740,6 +744,26 @@ export class SemanticSearchService {
   ): Promise<void> {
     const startTime = Date.now();
     const itemTitle = item.getDisplayTitle?.() || item.key;
+
+    // Check if item title or PDF path matches bilingual translation blacklist
+    let pdfPath = "";
+    try {
+      if (item.isPDFAttachment?.()) {
+        pdfPath =
+          (await item.getFilePathAsync?.()) || item.attachmentPath || "";
+      }
+    } catch (_) {}
+
+    if (
+      BilingualNoiseCleaner.isTitleOrPathBlacklisted(itemTitle) ||
+      (pdfPath && BilingualNoiseCleaner.isTitleOrPathBlacklisted(pdfPath))
+    ) {
+      ztoolkit.log(
+        `[SemanticSearch] indexItem() skip: "${itemTitle}" matches bilingual noise filter blacklist`,
+      );
+      return;
+    }
+
     ztoolkit.log(
       `[SemanticSearch] indexItem() start: ${item.key} "${itemTitle.substring(0, 30)}..."`,
     );

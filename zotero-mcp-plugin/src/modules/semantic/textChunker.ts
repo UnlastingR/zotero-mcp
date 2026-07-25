@@ -59,6 +59,38 @@ interface QualityResult {
 
 export class BilingualNoiseCleaner {
   /**
+   * Check if a document title or PDF filename matches blacklisted translation patterns
+   */
+  static isTitleOrPathBlacklisted(
+    titleOrPath: string,
+    customPatterns?: string[],
+  ): boolean {
+    if (!titleOrPath) return false;
+    const isEnabled = MCPSettingsService.isBilingualFilterEnabled();
+    if (!isEnabled) return false;
+
+    const patterns =
+      customPatterns && customPatterns.length > 0
+        ? customPatterns
+        : MCPSettingsService.getBilingualBlacklistPatterns();
+
+    if (!patterns || patterns.length === 0) return false;
+
+    return patterns.some((p) => {
+      if (!p || !p.trim()) return false;
+      try {
+        const regex = new RegExp(
+          p.trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"),
+          "i",
+        );
+        return regex.test(titleOrPath);
+      } catch (_) {
+        return titleOrPath.toLowerCase().includes(p.trim().toLowerCase());
+      }
+    });
+  }
+
+  /**
    * Filter out translation noise (Doc2X translation containers, blacklisted headers & blocks)
    */
   static clean(text: string, customPatterns?: string[]): string {
