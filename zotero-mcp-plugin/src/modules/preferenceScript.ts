@@ -2482,20 +2482,40 @@ function bindSemanticStatsSettings(doc: Document) {
     }
   }
 
-  // Bind Doc2X bilingual noise filter preferences
-  bindHtmlCheckbox(
-    doc,
-    "#zotero-prefpane-zotero-mcp-plugin-semantic-bilingualFilter",
-    "extensions.zotero.zotero-mcp-plugin.semantic.bilingualFilter",
-  );
-  bindHtmlInput(
-    doc,
-    "#zotero-prefpane-zotero-mcp-plugin-semantic-blacklistPatterns",
-    "extensions.zotero.zotero-mcp-plugin.semantic.blacklistPatterns",
-  );
+  try {
+    // Bind Doc2X bilingual noise filter preferences
+    bindHtmlCheckbox(
+      doc,
+      `#zotero-prefpane-${config.addonRef}-semantic-bilingualFilter`,
+      "extensions.zotero.zotero-mcp-plugin.semantic.bilingualFilter",
+    );
+    bindHtmlInput(
+      doc,
+      `#zotero-prefpane-${config.addonRef}-semantic-blacklistPatterns`,
+      "extensions.zotero.zotero-mcp-plugin.semantic.blacklistPatterns",
+    );
 
-  // Setup Zero-Lag Index Status Manager Table with Pagination
-  setupZeroLagIndexManager(doc);
+    // Setup Zero-Lag Index Status Manager Table with Deferred Async Execution
+    setTimeout(() => {
+      try {
+        setupZeroLagIndexManager(doc);
+      } catch (err) {
+        if (typeof ztoolkit !== "undefined") {
+          ztoolkit.log(
+            `[PreferenceScript] Async setupZeroLagIndexManager error: ${err}`,
+            "warn",
+          );
+        }
+      }
+    }, 300);
+  } catch (err) {
+    if (typeof ztoolkit !== "undefined") {
+      ztoolkit.log(
+        `[PreferenceScript] Error binding bilingual/index manager prefs: ${err}`,
+        "warn",
+      );
+    }
+  }
 }
 
 /**
@@ -2579,24 +2599,51 @@ function setupZeroLagIndexManager(doc: Document) {
         ?.vectorStore;
       statusMap.clear();
       if (vectorStore?.getAllItemVectorStatus) {
-        const vecStats = await vectorStore.getAllItemVectorStatus();
-        for (const s of vecStats) {
-          statusMap.set(s.itemKey, s.chunkCount);
+        try {
+          const vecStats = await vectorStore.getAllItemVectorStatus();
+          for (const s of vecStats || []) {
+            statusMap.set(s.itemKey, s.chunkCount);
+          }
+        } catch (e) {
+          if (typeof ztoolkit !== "undefined") {
+            ztoolkit.log(
+              `[IndexManager] Error fetching vector stats: ${e}`,
+              "warn",
+            );
+          }
         }
       }
 
-      // 2. Fetch lightweight Zotero PDF/Item list
-      const items = await Zotero.Items.getAll(1, true); // User library
+      // 2. Fetch Zotero PDF/Item list safely
       itemListCache = [];
+      try {
+        if (typeof Zotero !== "undefined" && Zotero.Items?.getAll) {
+          const items = await Zotero.Items.getAll(1, true); // User library
+          for (const item of items || []) {
+            if (item && (item.isRegularItem() || item.isPDFAttachment())) {
+              let title = "未命名文献";
+              try {
+                title =
+                  item.getDisplayTitle() ||
+                  (item.getField ? item.getField("title") : "未命名文献");
+              } catch (_) {
+                /* ignore */
+              }
 
-      for (const item of items) {
-        if (item.isRegularItem() || item.isPDFAttachment()) {
-          itemListCache.push({
-            key: item.key,
-            title:
-              item.getDisplayTitle() || item.getField("title") || "未命名文献",
-            isAttachment: item.isAttachment(),
-          });
+              itemListCache.push({
+                key: item.key,
+                title: title,
+                isAttachment: item.isAttachment(),
+              });
+            }
+          }
+        }
+      } catch (itemErr) {
+        if (typeof ztoolkit !== "undefined") {
+          ztoolkit.log(
+            `[IndexManager] Error fetching Zotero items: ${itemErr}`,
+            "warn",
+          );
         }
       }
 
