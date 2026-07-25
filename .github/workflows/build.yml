@@ -5,22 +5,19 @@ on:
     branches:
       - dev
       - main
-      - master
-  pull_request:
-    branches:
-      - dev
-      - main
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -35,9 +32,29 @@ jobs:
         working-directory: zotero-mcp-plugin
         run: npm run build
 
-      - name: Upload XPI Artifact
-        uses: actions/upload-artifact@v4
+      - name: Get version
+        id: version
+        working-directory: zotero-mcp-plugin
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Copy XPI with versioned name
+        run: |
+          cp zotero-mcp-plugin/.scaffold/build/zotero-mcp-plugin.xpi \
+             zotero-mcp-plugin-${{ steps.version.outputs.version }}-dev.xpi
+
+      - name: Delete existing dev-build release (if any)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete dev-build --yes 2>/dev/null || true
+          git push origin :refs/tags/dev-build 2>/dev/null || true
+
+      - name: Create dev-build pre-release with raw XPI
+        uses: softprops/action-gh-release@v2
         with:
-          name: zotero-mcp-plugin-dev
-          path: zotero-mcp-plugin/.scaffold/build/*.xpi
-          if-no-files-found: error
+          tag_name: dev-build
+          name: "Dev Build (latest)"
+          prerelease: true
+          body: |
+            Auto-built from `${{ github.ref_name }}` @ `${{ github.sha }}`
+          files: zotero-mcp-plugin-${{ steps.version.outputs.version }}-dev.xpi
