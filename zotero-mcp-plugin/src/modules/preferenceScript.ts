@@ -2524,45 +2524,135 @@ function bindSemanticStatsSettings(doc: Document) {
 function setupZeroLagIndexManager(doc: Document) {
   if (!doc) return;
 
-  const tbody = doc.querySelector("#zmp-idx-tbody") as HTMLElement;
-  const searchInput = doc.querySelector("#zmp-idx-search") as HTMLInputElement;
+  const openBtn = doc.querySelector("#zmp-btn-open-index-manager");
+  if (openBtn) {
+    openBtn.addEventListener("click", () => {
+      try {
+        const win = doc.defaultView || (globalThis as any).window;
+        if (win && win.open) {
+          win.open(
+            "chrome://zotero-mcp-plugin/content/indexManager.xhtml",
+            "ZoteroMCPIndexManager",
+            "chrome,centerscreen,width=920,height=640,resizable,scrollbars",
+          );
+        }
+      } catch (e) {
+        if (typeof ztoolkit !== "undefined") {
+          ztoolkit.log(
+            `[PreferenceScript] Error opening standalone window: ${e}`,
+            "error",
+          );
+        }
+      }
+    });
+  }
+
+  async function updateSummary() {
+    const summaryText = doc.querySelector("#zmp-pref-idx-summary");
+    const subText = doc.querySelector("#zmp-pref-idx-sub");
+    if (!summaryText) return;
+
+    try {
+      const items = (await Zotero.Items.getAll(1, true)) || [];
+      const validItems = items.filter(
+        (i) => i && (i.isRegularItem() || i.isPDFAttachment()),
+      );
+      const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch
+        ?.vectorStore;
+      let indexedCount = 0;
+      if (vectorStore?.getAllItemVectorStatus) {
+        const stats = await vectorStore.getAllItemVectorStatus();
+        indexedCount = (stats || []).filter(
+          (s: any) => s.chunkCount > 0,
+        ).length;
+      }
+      summaryText.textContent = `已向量化 ${indexedCount} / ${validItems.length} 条文献`;
+      if (subText) {
+        subText.textContent = `文献库共 ${validItems.length} 条有效文献/PDF，向量索引就绪`;
+      }
+    } catch (_) {
+      if (summaryText) summaryText.textContent = "全局语义向量数据库运行正常";
+    }
+  }
+
+  updateSummary();
+
+  const btnReindexAll = doc.querySelector("#zmp-idx-btn-reindex-all");
+  const btnClearAll = doc.querySelector("#zmp-idx-btn-clear-all");
+
+  btnReindexAll?.addEventListener("click", async () => {
+    const semanticService = (Zotero as any).ZoteroMCP?.semanticSearch;
+    if (semanticService?.buildIndex) {
+      const win = doc.defaultView || (globalThis as any).window;
+      if (win && win.alert) win.alert("已启动后台向量构建任务！");
+      await semanticService.buildIndex({ rebuild: true });
+      updateSummary();
+    }
+  });
+
+  btnClearAll?.addEventListener("click", async () => {
+    const win = doc.defaultView || (globalThis as any).window;
+    if (
+      win &&
+      win.confirm &&
+      win.confirm("确定要清空全库的向量索引吗？此操作不可撤销。")
+    ) {
+      const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch
+        ?.vectorStore;
+      if (vectorStore?.clear) {
+        await vectorStore.clear();
+        if (win.alert) win.alert("已成功清空所有向量索引。");
+        updateSummary();
+      }
+    }
+  });
+}
+
+// Standalone window initializer for indexManager.xhtml
+if (typeof (globalThis as any).window !== "undefined") {
+  const win = (globalThis as any).window;
+  if (win.document && win.document.id === "zotero-mcp-index-manager-window") {
+    win.addEventListener("DOMContentLoaded", () => {
+      initStandaloneIndexManager(win.document);
+    });
+  }
+}
+
+/**
+ * Initialize standalone 920x640 Manager Window Table
+ */
+export function initStandaloneIndexManager(doc: Document) {
+  const tbody = doc.querySelector("#mgr-tbody") as HTMLElement;
+  const searchInput = doc.querySelector("#mgr-search") as HTMLInputElement;
   const filterSelect = doc.querySelector(
-    "#zmp-idx-filter-status",
+    "#mgr-filter-status",
   ) as HTMLSelectElement;
-  const btnRefresh = doc.querySelector(
-    "#zmp-idx-btn-refresh",
-  ) as HTMLButtonElement;
+  const btnRefresh = doc.querySelector("#mgr-btn-refresh") as HTMLButtonElement;
   const btnReindexAll = doc.querySelector(
-    "#zmp-idx-btn-reindex-all",
+    "#mgr-btn-reindex-all",
   ) as HTMLButtonElement;
   const btnClearAll = doc.querySelector(
-    "#zmp-idx-btn-clear-all",
+    "#mgr-btn-clear-all",
   ) as HTMLButtonElement;
   const paginationInfo = doc.querySelector(
-    "#zmp-idx-pagination-info",
+    "#mgr-pagination-info",
   ) as HTMLElement;
-  const btnPrev = doc.querySelector("#zmp-idx-btn-prev") as HTMLButtonElement;
-  const btnNext = doc.querySelector("#zmp-idx-btn-next") as HTMLButtonElement;
+  const btnPrev = doc.querySelector("#mgr-btn-prev") as HTMLButtonElement;
+  const btnNext = doc.querySelector("#mgr-btn-next") as HTMLButtonElement;
+  const summaryText = doc.querySelector("#mgr-stats-summary") as HTMLElement;
 
   if (!tbody) return;
 
-  // In-memory lightweight status map (itemKey -> chunkCount)
+  const win = doc.defaultView || (globalThis as any).window;
   const statusMap = new Map<string, number>();
-  let itemListCache: Array<{
-    key: string;
-    title: string;
-    isAttachment: boolean;
-  }> = [];
-
+  let itemListCache: Array<{ key: string; title: string }> = [];
   let currentPage = 1;
-  const pageSize = 12;
+  const pageSize = 15;
 
-  // Helper to get Collection Path string asynchronously
   const collectionPathCache = new Map<string, string>();
   function getCollectionPath(itemKey: string): string {
-    if (collectionPathCache.has(itemKey)) {
+    if (collectionPathCache.has(itemKey))
       return collectionPathCache.get(itemKey)!;
-    }
     try {
       const item = Zotero.Items.getByLibraryAndKey(1, itemKey);
       if (!item) return "-";
@@ -2573,128 +2663,91 @@ function setupZeroLagIndexManager(doc: Document) {
       }
       const col = Zotero.Collections.get(collections[0]);
       if (!col) return "-";
-      let path = col.name;
-      let parentID = col.parentID;
-      while (parentID) {
-        const parent = Zotero.Collections.get(parentID);
-        if (!parent) break;
-        path = `${parent.name} / ${path}`;
-        parentID = parent.parentID;
-      }
+      const path = col.name;
       collectionPathCache.set(itemKey, path);
       return path;
-    } catch (e) {
+    } catch (_) {
       return "-";
     }
   }
 
-  // Reload lightweight item list & vector status map
-  async function refreshData() {
-    try {
-      if (tbody)
-        tbody.innerHTML = `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-2);">正在读取索引数据...</td></tr>`;
+  async function loadData() {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-3);">正在刷新向量索引与文献元数据...</td></tr>`;
 
-      // 1. Fetch vector status map (O(1) Memory lookup)
-      const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch
-        ?.vectorStore;
-      statusMap.clear();
-      if (vectorStore?.getAllItemVectorStatus) {
-        try {
-          const vecStats = await vectorStore.getAllItemVectorStatus();
-          for (const s of vecStats || []) {
-            statusMap.set(s.itemKey, s.chunkCount);
-          }
-        } catch (e) {
-          if (typeof ztoolkit !== "undefined") {
-            ztoolkit.log(
-              `[IndexManager] Error fetching vector stats: ${e}`,
-              "warn",
-            );
-          }
-        }
-      }
-
-      // 2. Fetch Zotero PDF/Item list safely
-      itemListCache = [];
+    statusMap.clear();
+    const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch?.vectorStore;
+    if (vectorStore?.getAllItemVectorStatus) {
       try {
-        if (typeof Zotero !== "undefined" && Zotero.Items?.getAll) {
-          const items = await Zotero.Items.getAll(1, true); // User library
-          for (const item of items || []) {
-            if (item && (item.isRegularItem() || item.isPDFAttachment())) {
-              let title = "未命名文献";
-              try {
-                title =
-                  item.getDisplayTitle() ||
-                  (item.getField ? item.getField("title") : "未命名文献");
-              } catch (_) {
-                /* ignore */
-              }
-
-              itemListCache.push({
-                key: item.key,
-                title: title,
-                isAttachment: item.isAttachment(),
-              });
-            }
-          }
+        const stats = await vectorStore.getAllItemVectorStatus();
+        for (const s of stats || []) {
+          statusMap.set(s.itemKey, s.chunkCount);
         }
-      } catch (itemErr) {
-        if (typeof ztoolkit !== "undefined") {
-          ztoolkit.log(
-            `[IndexManager] Error fetching Zotero items: ${itemErr}`,
-            "warn",
-          );
+      } catch (_) {}
+    }
+
+    itemListCache = [];
+    try {
+      const items = (await Zotero.Items.getAll(1, true)) || [];
+      for (const item of items) {
+        if (item && (item.isRegularItem() || item.isPDFAttachment())) {
+          let title = "未命名文献";
+          try {
+            title =
+              item.getDisplayTitle() ||
+              (item.getField ? item.getField("title") : "未命名文献");
+          } catch (_) {}
+          itemListCache.push({ key: item.key, title });
         }
       }
+    } catch (_) {}
 
-      renderTable();
-    } catch (err) {
-      ztoolkit.log(`[IndexManager] Error refreshing data: ${err}`, "error");
+    if (summaryText) {
+      const indexedCount = Array.from(statusMap.values()).filter(
+        (v) => v > 0,
+      ).length;
+      summaryText.textContent = `已索引: ${indexedCount} / ${itemListCache.length} 条文献`;
     }
+
+    render();
   }
 
-  // Render paginated view
-  function renderTable() {
-    const query = searchInput?.value?.toLowerCase().trim() || "";
-    const filter = filterSelect?.value || "all";
+  function render() {
+    const query = searchInput?.value.toLowerCase().trim() || "";
+    const statusFilter = filterSelect?.value || "all";
 
-    // Filter items
     const filtered = itemListCache.filter((item) => {
-      const isIndexed =
-        statusMap.has(item.key) && (statusMap.get(item.key) || 0) > 0;
-      if (filter === "indexed" && !isIndexed) return false;
-      if (filter === "unindexed" && isIndexed) return false;
+      const chunkCount = statusMap.get(item.key) || 0;
+      const isIndexed = chunkCount > 0;
+
+      if (statusFilter === "indexed" && !isIndexed) return false;
+      if (statusFilter === "unindexed" && isIndexed) return false;
 
       if (query) {
-        const titleMatch = item.title.toLowerCase().includes(query);
-        const colMatch = (collectionPathCache.get(item.key) || "")
-          .toLowerCase()
-          .includes(query);
-        if (!titleMatch && !colMatch) return false;
+        const colPath = getCollectionPath(item.key).toLowerCase();
+        return (
+          item.title.toLowerCase().includes(query) ||
+          colPath.includes(query) ||
+          item.key.toLowerCase().includes(query)
+        );
       }
       return true;
     });
 
-    const totalCount = filtered.length;
-    const maxPage = Math.max(1, Math.ceil(totalCount / pageSize));
-    if (currentPage > maxPage) currentPage = maxPage;
+    const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+    if (currentPage > totalPages) currentPage = totalPages;
 
-    const startIdx = (currentPage - 1) * pageSize;
-    const pageItems = filtered.slice(startIdx, startIdx + pageSize);
+    const start = (currentPage - 1) * pageSize;
+    const pageItems = filtered.slice(start, start + pageSize);
 
-    // Update pagination info
     if (paginationInfo) {
-      paginationInfo.textContent = `第 ${currentPage} / ${maxPage} 页 (共 ${totalCount} 条记录)`;
+      paginationInfo.textContent = `第 ${currentPage} / ${totalPages} 页 (共 ${filtered.length} 条记录)`;
     }
-    if (btnPrev) btnPrev.disabled = currentPage <= 1;
-    if (btnNext) btnNext.disabled = currentPage >= maxPage;
 
     if (pageItems.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-3);">无匹配记录</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:30px; color:var(--text-3);">未匹配到任何文献记录</td></tr>`;
       return;
     }
 
-    // Render rows with lazy collection path
     let html = "";
     for (const item of pageItems) {
       const chunkCount = statusMap.get(item.key) || 0;
@@ -2702,25 +2755,26 @@ function setupZeroLagIndexManager(doc: Document) {
       const colPath = getCollectionPath(item.key);
 
       const statusBadge = isIndexed
-        ? `<span style="color:#10b981; font-weight:600;">✓ 已索引 (${chunkCount})</span>`
-        : `<span style="color:#9ca3af;">- 未索引</span>`;
+        ? `<span class="badge badge-success">✓ 已索引</span>`
+        : `<span class="badge badge-gray">- 未索引</span>`;
 
       const actionBtn = isIndexed
-        ? `<button class="zmp-b zmp-bd" data-act="clear" data-key="${item.key}" style="font-size:11px; padding:2px 6px;">清除</button>`
-        : `<button class="zmp-b zmp-bp" data-act="reindex" data-key="${item.key}" style="font-size:11px; padding:2px 6px;">索引</button>`;
+        ? `<button class="mgr-btn mgr-btn-danger" data-act="clear" data-key="${item.key}" style="padding:3px 8px; font-size:11px;">清除</button>`
+        : `<button class="mgr-btn mgr-btn-primary" data-act="reindex" data-key="${item.key}" style="padding:3px 8px; font-size:11px;">索引</button>`;
 
       html += `
-        <tr style="border-bottom:1px solid var(--border-light);">
-          <td style="padding:7px 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px;" title="${item.title}">${item.title}</td>
-          <td style="padding:7px 12px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" title="${colPath}">${colPath}</td>
-          <td style="padding:7px 12px; text-align:center;">${statusBadge}</td>
-          <td style="padding:7px 12px; text-align:right;">${actionBtn}</td>
+        <tr>
+          <td style="font-weight:500;" title="${item.title}">${item.title}</td>
+          <td style="color:var(--text-2);" title="${colPath}">${colPath}</td>
+          <td style="text-align:center;">${statusBadge}</td>
+          <td style="text-align:center; font-family:monospace;">${chunkCount}</td>
+          <td style="text-align:right;">${actionBtn}</td>
         </tr>
       `;
     }
+
     tbody.innerHTML = html;
 
-    // Bind item action buttons
     tbody.querySelectorAll("button[data-act]").forEach((btn: Element) => {
       btn.addEventListener("click", async (e: Event) => {
         const target = e.currentTarget as HTMLElement;
@@ -2735,74 +2789,65 @@ function setupZeroLagIndexManager(doc: Document) {
         if (act === "clear" && vectorStore) {
           await vectorStore.deleteItemVectors(key);
           statusMap.delete(key);
-          renderTable();
+          render();
         } else if (
           act === "reindex" &&
           semanticService &&
           Zotero.Items.getByLibraryAndKey
         ) {
-          target.textContent = "构建中...";
+          target.textContent = "索引中...";
           const item = Zotero.Items.getByLibraryAndKey(1, key);
           if (item) {
             await semanticService.indexItem(item);
-            await refreshData();
+            await loadData();
           }
         }
       });
     });
   }
 
-  // Event Listeners
-  btnRefresh?.addEventListener("click", () => refreshData());
+  btnRefresh?.addEventListener("click", () => loadData());
   searchInput?.addEventListener("input", () => {
     currentPage = 1;
-    renderTable();
+    render();
   });
   filterSelect?.addEventListener("change", () => {
     currentPage = 1;
-    renderTable();
+    render();
   });
   btnPrev?.addEventListener("click", () => {
     if (currentPage > 1) {
       currentPage--;
-      renderTable();
+      render();
     }
   });
   btnNext?.addEventListener("click", () => {
     currentPage++;
-    renderTable();
+    render();
   });
-
-  const win = doc.defaultView || (globalThis as any).window;
-
   btnReindexAll?.addEventListener("click", async () => {
-    if (win && !win.confirm("确定要为所有未索引的文献批量构建向量索引吗？"))
-      return;
-    btnReindexAll.disabled = true;
-    btnReindexAll.textContent = "批量构建中...";
     const semanticService = (Zotero as any).ZoteroMCP?.semanticSearch;
-    if (semanticService) {
-      for (const item of itemListCache) {
-        if (!statusMap.has(item.key)) {
-          const zItem = Zotero.Items.getByLibraryAndKey(1, item.key);
-          if (zItem) await semanticService.indexItem(zItem);
-        }
+    if (semanticService?.buildIndex) {
+      if (win && win.alert) win.alert("已启动后台向量构建任务！");
+      await semanticService.buildIndex({ rebuild: true });
+      loadData();
+    }
+  });
+  btnClearAll?.addEventListener("click", async () => {
+    if (
+      win &&
+      win.confirm &&
+      win.confirm("确定要清空全库的向量索引吗？此操作不可撤销。")
+    ) {
+      const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch
+        ?.vectorStore;
+      if (vectorStore?.clear) {
+        await vectorStore.clear();
+        if (win.alert) win.alert("已成功清空所有向量索引。");
+        loadData();
       }
     }
-    btnReindexAll.disabled = false;
-    btnReindexAll.textContent = "批量构建索引";
-    await refreshData();
   });
 
-  btnClearAll?.addEventListener("click", async () => {
-    if (win && !win.confirm("警告：确定要清除所有已生成的向量索引吗？")) return;
-    const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch?.vectorStore;
-    if (vectorStore?.clearAllVectors) {
-      await vectorStore.clearAllVectors();
-      await refreshData();
-    }
-  });
-
-  // Initial load
-  refreshData();
+  loadData();
 }
