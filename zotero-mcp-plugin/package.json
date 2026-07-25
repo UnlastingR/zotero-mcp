@@ -31,7 +31,8 @@
     "release:init": "node scripts/init-release.js",
     "test": "zotero-plugin test",
     "test:update": "node scripts/test-update.js",
-    "update-deps": "npm update --save"
+    "update-deps": "npm update --save",
+    "prepare": "cd .. && husky zotero-mcp-plugin/.husky"
   },
   "dependencies": {
     "zotero-plugin-toolkit": "^5.1.2"
@@ -43,6 +44,8 @@
     "@zotero-plugin/eslint-config": "^0.6.7",
     "chai": "^5.2.1",
     "eslint": "^9.32.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "mocha": "^11.7.1",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2",
@@ -62,6 +65,14 @@
           "htmlWhitespaceSensitivity": "css"
         }
       }
+    ]
+  },
+  "lint-staged": {
+    "*.{js,mjs,ts,tsx,json,md}": [
+      "prettier --write"
+    ],
+    "*.{js,mjs,ts,tsx}": [
+      "eslint --fix"
     ]
   }
 }

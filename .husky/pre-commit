@@ -1,0 +1,1 @@
+cd zotero-mcp-plugin && npx lint-staged
