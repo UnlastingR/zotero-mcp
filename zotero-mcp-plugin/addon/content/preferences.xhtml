@@ -32,8 +32,6 @@
     <!-- Semantic search settings -->
     <preference id="extensions.zotero.zotero-mcp-plugin.semantic.enabled" name="extensions.zotero.zotero-mcp-plugin.semantic.enabled" type="bool" />
     <preference id="extensions.zotero.zotero-mcp-plugin.semantic.autoUpdate" name="extensions.zotero.zotero-mcp-plugin.semantic.autoUpdate" type="bool" />
-    <preference id="extensions.zotero.zotero-mcp-plugin.semantic.bilingualFilter" name="extensions.zotero.zotero-mcp-plugin.semantic.bilingualFilter" type="bool" />
-    <preference id="extensions.zotero.zotero-mcp-plugin.semantic.blacklistPatterns" name="extensions.zotero.zotero-mcp-plugin.semantic.blacklistPatterns" type="string" />
   </preferences>
 
   <html:style>
@@ -772,14 +770,14 @@
               <html:div class="zmp-sw-sub">分块时自动跳过匹配黑名单关键词的译文块与全篇翻译章节</html:div>
             </html:div>
             <html:label class="zmp-tog">
-              <html:input type="checkbox" id="zotero-prefpane-__addonRef__-semantic-bilingualFilter" preference="extensions.zotero.zotero-mcp-plugin.semantic.bilingualFilter" />
+              <html:input type="checkbox" id="zotero-prefpane-__addonRef__-semantic-bilingualFilter" />
               <html:span class="zmp-tog-track"></html:span>
             </html:label>
           </html:div>
 
           <html:div class="zmp-fg">
             <html:label class="zmp-fl">黑名单模式与关键词（支持正则表达式/关键词，多个用逗号或换行分隔）</html:label>
-            <html:textarea id="zotero-prefpane-__addonRef__-semantic-blacklistPatterns" preference="extensions.zotero.zotero-mcp-plugin.semantic.blacklistPatterns" class="zmp-fi zmp-fi-l zmp-fi-mono" style="height:54px; resize:vertical;"></html:textarea>
+            <html:textarea id="zotero-prefpane-__addonRef__-semantic-blacklistPatterns" class="zmp-fi zmp-fi-l zmp-fi-mono" style="height:54px; resize:vertical;"></html:textarea>
             <html:div class="zmp-fh">默认排除：_translated, _zh, _cn, (中文), (翻译), [翻译], [译文], 中文翻译, 译文</html:div>
           </html:div>
         </html:div>
