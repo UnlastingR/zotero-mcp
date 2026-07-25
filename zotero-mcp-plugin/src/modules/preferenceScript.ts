@@ -5,36 +5,59 @@ import { ClientConfigGenerator } from "./clientConfigGenerator";
 export async function registerPrefsScripts(_window: Window) {
   // This function is called when the prefs window is opened
   // See addon/content/preferences.xhtml onpaneload
-  ztoolkit.log(`[PreferenceScript] [DIAGNOSTIC] Registering preference scripts...`);
-  
+  ztoolkit.log(
+    `[PreferenceScript] [DIAGNOSTIC] Registering preference scripts...`,
+  );
+
   addon.data.prefs = { window: _window };
-  
+
   // 诊断当前偏好设置状态
   try {
-    const currentEnabled = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.mcp.server.enabled", true);
-    const currentPort = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.mcp.server.port", true);
-    ztoolkit.log(`[PreferenceScript] [DIAGNOSTIC] Current preferences - enabled: ${currentEnabled}, port: ${currentPort}`);
-    
+    const currentEnabled = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.mcp.server.enabled",
+      true,
+    );
+    const currentPort = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.mcp.server.port",
+      true,
+    );
+    ztoolkit.log(
+      `[PreferenceScript] [DIAGNOSTIC] Current preferences - enabled: ${currentEnabled}, port: ${currentPort}`,
+    );
+
     // 检查是否是环境兼容性问题
     const doc = _window.document;
-    ztoolkit.log(`[PreferenceScript] [DIAGNOSTIC] Document available: ${!!doc}`);
-    
+    ztoolkit.log(
+      `[PreferenceScript] [DIAGNOSTIC] Document available: ${!!doc}`,
+    );
+
     if (doc) {
-      const prefElements = doc.querySelectorAll('[preference]');
-      ztoolkit.log(`[PreferenceScript] [DIAGNOSTIC] Found ${prefElements.length} preference-bound elements`);
-      
+      const prefElements = doc.querySelectorAll("[preference]");
+      ztoolkit.log(
+        `[PreferenceScript] [DIAGNOSTIC] Found ${prefElements.length} preference-bound elements`,
+      );
+
       // 特别检查服务器启用元素
-      const serverEnabledElement = doc.querySelector('#zotero-prefpane-zotero-mcp-plugin-mcp-server-enabled');
+      const serverEnabledElement = doc.querySelector(
+        "#zotero-prefpane-zotero-mcp-plugin-mcp-server-enabled",
+      );
       if (serverEnabledElement) {
-        ztoolkit.log(`[PreferenceScript] [DIAGNOSTIC] Server enabled element found, initial checked state: ${serverEnabledElement.hasAttribute('checked')}`);
+        ztoolkit.log(
+          `[PreferenceScript] [DIAGNOSTIC] Server enabled element found, initial checked state: ${serverEnabledElement.hasAttribute("checked")}`,
+        );
       } else {
-        ztoolkit.log(`[PreferenceScript] [DIAGNOSTIC] WARNING: Server enabled element NOT found`);
+        ztoolkit.log(
+          `[PreferenceScript] [DIAGNOSTIC] WARNING: Server enabled element NOT found`,
+        );
       }
     }
   } catch (error) {
-    ztoolkit.log(`[PreferenceScript] [DIAGNOSTIC] Error in preference diagnostic: ${error}`, 'error');
+    ztoolkit.log(
+      `[PreferenceScript] [DIAGNOSTIC] Error in preference diagnostic: ${error}`,
+      "error",
+    );
   }
-  
+
   bindPrefEvents();
 }
 
@@ -54,7 +77,12 @@ function bindHtmlCheckbox(doc: Document, selector: string, prefKey: string) {
 /**
  * Bind an HTML text/number input to a Zotero preference
  */
-function bindHtmlInput(doc: Document, selector: string, prefKey: string, isNumber = false) {
+function bindHtmlInput(
+  doc: Document,
+  selector: string,
+  prefKey: string,
+  isNumber = false,
+) {
   const el = doc?.querySelector(selector) as HTMLInputElement;
   if (!el) return;
   const val = Zotero.Prefs.get(prefKey, true);
@@ -89,17 +117,28 @@ function bindPrefEvents() {
 
   if (serverEnabledCheckbox) {
     // Initialize checkbox state
-    const currentEnabled = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.mcp.server.enabled", true);
+    const currentEnabled = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.mcp.server.enabled",
+      true,
+    );
     serverEnabledCheckbox.checked = currentEnabled !== false;
-    ztoolkit.log(`[PreferenceScript] Initialized checkbox state: ${currentEnabled}`);
+    ztoolkit.log(
+      `[PreferenceScript] Initialized checkbox state: ${currentEnabled}`,
+    );
 
     // Add change listener (HTML checkbox uses 'change' event)
     serverEnabledCheckbox.addEventListener("change", () => {
       const checked = serverEnabledCheckbox.checked;
-      ztoolkit.log(`[PreferenceScript] Server toggle changed - checked: ${checked}`);
+      ztoolkit.log(
+        `[PreferenceScript] Server toggle changed - checked: ${checked}`,
+      );
 
       // Update preference manually
-      Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.mcp.server.enabled", checked, true);
+      Zotero.Prefs.set(
+        "extensions.zotero.zotero-mcp-plugin.mcp.server.enabled",
+        checked,
+        true,
+      );
 
       // Update cascade visibility
       updateServerDependentUI(doc, checked);
@@ -110,8 +149,11 @@ function bindPrefEvents() {
         if (httpServer) {
           if (checked) {
             if (!httpServer.isServerRunning()) {
-              const portPref = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.mcp.server.port", true);
-              const port = typeof portPref === 'number' ? portPref : 23120;
+              const portPref = Zotero.Prefs.get(
+                "extensions.zotero.zotero-mcp-plugin.mcp.server.port",
+                true,
+              );
+              const port = typeof portPref === "number" ? portPref : 23120;
               httpServer.start(port);
               ztoolkit.log(`[PreferenceScript] Server started on port ${port}`);
             }
@@ -123,14 +165,17 @@ function bindPrefEvents() {
           }
         }
       } catch (error) {
-        ztoolkit.log(`[PreferenceScript] Error controlling server: ${error}`, 'error');
+        ztoolkit.log(
+          `[PreferenceScript] Error controlling server: ${error}`,
+          "error",
+        );
       }
     });
 
     // Initialize cascade visibility
     updateServerDependentUI(doc, currentEnabled !== false);
   }
-  
+
   // Port input validation
   const portInput = doc?.querySelector(
     `#zotero-prefpane-${config.addonRef}-mcp-server-port`,
@@ -138,7 +183,10 @@ function bindPrefEvents() {
 
   // Initialize port value from pref
   if (portInput) {
-    const savedPort = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.mcp.server.port", true);
+    const savedPort = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.mcp.server.port",
+      true,
+    );
     if (savedPort) portInput.value = String(savedPort);
   }
 
@@ -149,38 +197,120 @@ function bindPrefEvents() {
         addon.data.prefs!.window.alert(
           getString("pref-server-port-invalid" as any),
         );
-        const originalPort = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.mcp.server.port", true) || 23120;
+        const originalPort =
+          Zotero.Prefs.get(
+            "extensions.zotero.zotero-mcp-plugin.mcp.server.port",
+            true,
+          ) || 23120;
         portInput.value = originalPort.toString();
       } else {
-        Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.mcp.server.port", port, true);
+        Zotero.Prefs.set(
+          "extensions.zotero.zotero-mcp-plugin.mcp.server.port",
+          port,
+          true,
+        );
       }
     }
   });
 
   // Bind HTML toggle switches (these need manual pref sync since they're not XUL checkboxes)
-  bindHtmlCheckbox(doc, `#zotero-prefpane-${config.addonRef}-mcp-server-allow-remote`, "extensions.zotero.zotero-mcp-plugin.mcp.server.allowRemote");
-  bindHtmlCheckbox(doc, `#zotero-prefpane-${config.addonRef}-include-metadata`, "extensions.zotero.zotero-mcp-plugin.ui.includeMetadata");
-  bindHtmlCheckbox(doc, `#zotero-prefpane-${config.addonRef}-semantic-auto-update`, "extensions.zotero.zotero-mcp-plugin.semantic.autoUpdate");
-  bindHtmlCheckbox(doc, `#zotero-prefpane-${config.addonRef}-custom-include-webpage`, "extensions.zotero.zotero-mcp-plugin.custom.includeWebpage");
-  bindHtmlCheckbox(doc, `#zotero-prefpane-${config.addonRef}-custom-enable-compression`, "extensions.zotero.zotero-mcp-plugin.custom.enableCompression");
+  bindHtmlCheckbox(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-mcp-server-allow-remote`,
+    "extensions.zotero.zotero-mcp-plugin.mcp.server.allowRemote",
+  );
+  bindHtmlCheckbox(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-include-metadata`,
+    "extensions.zotero.zotero-mcp-plugin.ui.includeMetadata",
+  );
+  bindHtmlCheckbox(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-semantic-auto-update`,
+    "extensions.zotero.zotero-mcp-plugin.semantic.autoUpdate",
+  );
+  bindHtmlCheckbox(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-include-webpage`,
+    "extensions.zotero.zotero-mcp-plugin.custom.includeWebpage",
+  );
+  bindHtmlCheckbox(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-enable-compression`,
+    "extensions.zotero.zotero-mcp-plugin.custom.enableCompression",
+  );
 
   // Bind HTML number/text inputs that need manual pref sync
-  bindHtmlInput(doc, `#zotero-prefpane-${config.addonRef}-max-tokens`, "extensions.zotero.zotero-mcp-plugin.ai.maxTokens", true);
-  bindHtmlSelect(doc, `#zotero-prefpane-${config.addonRef}-content-mode`, "extensions.zotero.zotero-mcp-plugin.content.mode");
-  bindHtmlInput(doc, `#zotero-prefpane-${config.addonRef}-custom-content-length`, "extensions.zotero.zotero-mcp-plugin.custom.maxContentLength", true);
-  bindHtmlInput(doc, `#zotero-prefpane-${config.addonRef}-custom-max-attachments`, "extensions.zotero.zotero-mcp-plugin.custom.maxAttachments", true);
-  bindHtmlInput(doc, `#zotero-prefpane-${config.addonRef}-custom-max-notes`, "extensions.zotero.zotero-mcp-plugin.custom.maxNotes", true);
-  bindHtmlInput(doc, `#zotero-prefpane-${config.addonRef}-custom-keyword-count`, "extensions.zotero.zotero-mcp-plugin.custom.keywordCount", true);
-  bindHtmlInput(doc, `#zotero-prefpane-${config.addonRef}-custom-truncate-length`, "extensions.zotero.zotero-mcp-plugin.custom.smartTruncateLength", true);
-  bindHtmlInput(doc, `#zotero-prefpane-${config.addonRef}-custom-search-limit`, "extensions.zotero.zotero-mcp-plugin.custom.searchItemLimit", true);
-  bindHtmlInput(doc, `#zotero-prefpane-${config.addonRef}-custom-max-annotations`, "extensions.zotero.zotero-mcp-plugin.custom.maxAnnotationsPerRequest", true);
+  bindHtmlInput(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-max-tokens`,
+    "extensions.zotero.zotero-mcp-plugin.ai.maxTokens",
+    true,
+  );
+  bindHtmlSelect(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-content-mode`,
+    "extensions.zotero.zotero-mcp-plugin.content.mode",
+  );
+  bindHtmlInput(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-content-length`,
+    "extensions.zotero.zotero-mcp-plugin.custom.maxContentLength",
+    true,
+  );
+  bindHtmlInput(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-max-attachments`,
+    "extensions.zotero.zotero-mcp-plugin.custom.maxAttachments",
+    true,
+  );
+  bindHtmlInput(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-max-notes`,
+    "extensions.zotero.zotero-mcp-plugin.custom.maxNotes",
+    true,
+  );
+  bindHtmlInput(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-keyword-count`,
+    "extensions.zotero.zotero-mcp-plugin.custom.keywordCount",
+    true,
+  );
+  bindHtmlInput(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-truncate-length`,
+    "extensions.zotero.zotero-mcp-plugin.custom.smartTruncateLength",
+    true,
+  );
+  bindHtmlInput(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-search-limit`,
+    "extensions.zotero.zotero-mcp-plugin.custom.searchItemLimit",
+    true,
+  );
+  bindHtmlInput(
+    doc,
+    `#zotero-prefpane-${config.addonRef}-custom-max-annotations`,
+    "extensions.zotero.zotero-mcp-plugin.custom.maxAnnotationsPerRequest",
+    true,
+  );
 
   // Client config generation
-  const clientSelect = doc?.querySelector("#client-type-select") as HTMLSelectElement;
-  const serverNameInput = doc?.querySelector("#server-name-input") as HTMLInputElement;
-  const generateButton = doc?.querySelector("#generate-config-button") as HTMLButtonElement;
-  const copyConfigButton = doc?.querySelector("#copy-config-button") as HTMLButtonElement;
-  const copyInstrButton = doc?.querySelector("#copy-instr-button") as HTMLButtonElement;
+  const clientSelect = doc?.querySelector(
+    "#client-type-select",
+  ) as HTMLSelectElement;
+  const serverNameInput = doc?.querySelector(
+    "#server-name-input",
+  ) as HTMLInputElement;
+  const generateButton = doc?.querySelector(
+    "#generate-config-button",
+  ) as HTMLButtonElement;
+  const copyConfigButton = doc?.querySelector(
+    "#copy-config-button",
+  ) as HTMLButtonElement;
+  const copyInstrButton = doc?.querySelector(
+    "#copy-instr-button",
+  ) as HTMLButtonElement;
   const configOutput = doc?.querySelector("#config-output") as HTMLElement;
   const configGuide = doc?.querySelector("#config-guide") as HTMLElement;
 
@@ -194,8 +324,16 @@ function bindPrefEvents() {
       const port = parseInt(portInput?.value || "23120", 10);
 
       // Generate configuration
-      currentConfig = ClientConfigGenerator.generateConfig(clientType, port, serverName);
-      currentGuide = ClientConfigGenerator.generateFullGuide(clientType, port, serverName);
+      currentConfig = ClientConfigGenerator.generateConfig(
+        clientType,
+        port,
+        serverName,
+      );
+      currentGuide = ClientConfigGenerator.generateFullGuide(
+        clientType,
+        port,
+        serverName,
+      );
 
       // Display configuration in div panel
       if (configOutput) {
@@ -214,13 +352,17 @@ function bindPrefEvents() {
       ztoolkit.log(`[PreferenceScript] Generated config for ${clientType}`);
     } catch (error) {
       addon.data.prefs!.window.alert(`配置生成失败: ${error}`);
-      ztoolkit.log(`[PreferenceScript] Config generation failed: ${error}`, "error");
+      ztoolkit.log(
+        `[PreferenceScript] Config generation failed: ${error}`,
+        "error",
+      );
     }
   });
 
   copyConfigButton?.addEventListener("click", async () => {
     try {
-      const success = await ClientConfigGenerator.copyToClipboard(currentConfig);
+      const success =
+        await ClientConfigGenerator.copyToClipboard(currentConfig);
       if (success) {
         const originalText = copyConfigButton.textContent;
         copyConfigButton.textContent = "已复制!";
@@ -258,7 +400,10 @@ function bindPrefEvents() {
       }
     } catch (error) {
       addon.data.prefs!.window.alert(`复制失败: ${error}`);
-      ztoolkit.log(`[PreferenceScript] Copy instructions failed: ${error}`, "error");
+      ztoolkit.log(
+        `[PreferenceScript] Copy instructions failed: ${error}`,
+        "error",
+      );
     }
   });
 
@@ -302,15 +447,17 @@ function bindPrefEvents() {
  * Update server-dependent UI visibility (cascade hiding)
  */
 function updateServerDependentUI(doc: Document, enabled: boolean) {
-  const serverContent = doc?.querySelector('#server-dependent-content') as HTMLElement;
-  const serverOffHint = doc?.querySelector('#server-off-hint') as HTMLElement;
-  const portRow = doc?.querySelector('#server-port-row') as HTMLElement;
-  const remoteRow = doc?.querySelector('#server-remote-row') as HTMLElement;
+  const serverContent = doc?.querySelector(
+    "#server-dependent-content",
+  ) as HTMLElement;
+  const serverOffHint = doc?.querySelector("#server-off-hint") as HTMLElement;
+  const portRow = doc?.querySelector("#server-port-row") as HTMLElement;
+  const remoteRow = doc?.querySelector("#server-remote-row") as HTMLElement;
 
-  if (serverContent) serverContent.style.display = enabled ? '' : 'none';
-  if (serverOffHint) serverOffHint.style.display = enabled ? 'none' : 'block';
-  if (portRow) portRow.style.display = enabled ? '' : 'none';
-  if (remoteRow) remoteRow.style.display = enabled ? '' : 'none';
+  if (serverContent) serverContent.style.display = enabled ? "" : "none";
+  if (serverOffHint) serverOffHint.style.display = enabled ? "none" : "block";
+  if (portRow) portRow.style.display = enabled ? "" : "none";
+  if (remoteRow) remoteRow.style.display = enabled ? "" : "none";
 }
 
 /**
@@ -318,17 +465,17 @@ function updateServerDependentUI(doc: Document, enabled: boolean) {
  */
 function bindCollapsiblePanels(doc: Document) {
   const panels = [
-    { toggle: '#custom-settings-toggle', panel: '#custom-settings-panel' },
-    { toggle: '#rate-limit-toggle', panel: '#rate-limit-panel' },
-    { toggle: '#detail-stats-toggle', panel: '#detail-stats-panel' },
+    { toggle: "#custom-settings-toggle", panel: "#custom-settings-panel" },
+    { toggle: "#rate-limit-toggle", panel: "#rate-limit-panel" },
+    { toggle: "#detail-stats-toggle", panel: "#detail-stats-panel" },
   ];
 
   for (const { toggle, panel } of panels) {
     const toggleEl = doc?.querySelector(toggle) as HTMLElement;
     const panelEl = doc?.querySelector(panel) as HTMLElement;
     if (toggleEl && panelEl) {
-      toggleEl.addEventListener('click', () => {
-        panelEl.classList.toggle('open');
+      toggleEl.addEventListener("click", () => {
+        panelEl.classList.toggle("open");
       });
     }
   }
@@ -338,18 +485,22 @@ function bindCollapsiblePanels(doc: Document) {
  * Auto-open custom settings panel when custom mode is selected
  */
 function bindContentModeToggle(doc: Document) {
-  const modeSelect = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-content-mode`) as HTMLSelectElement;
-  const customPanel = doc?.querySelector('#custom-settings-panel') as HTMLElement;
+  const modeSelect = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-content-mode`,
+  ) as HTMLSelectElement;
+  const customPanel = doc?.querySelector(
+    "#custom-settings-panel",
+  ) as HTMLElement;
 
   if (modeSelect && customPanel) {
     // Auto-open on custom mode
-    if (modeSelect.value === 'custom') {
-      customPanel.classList.add('open');
+    if (modeSelect.value === "custom") {
+      customPanel.classList.add("open");
     }
 
-    modeSelect.addEventListener('change', () => {
-      if (modeSelect.value === 'custom') {
-        customPanel.classList.add('open');
+    modeSelect.addEventListener("change", () => {
+      if (modeSelect.value === "custom") {
+        customPanel.classList.add("open");
       }
     });
   }
@@ -359,24 +510,30 @@ function bindContentModeToggle(doc: Document) {
  * Update rate limit summary text in collapsible header
  */
 function updateRateLimitSummary(doc: Document) {
-  const rpmInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-rpm`) as HTMLInputElement;
-  const costInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-cost`) as HTMLInputElement;
-  const summaryEl = doc?.querySelector('#rate-limit-summary') as HTMLElement;
+  const rpmInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-rpm`,
+  ) as HTMLInputElement;
+  const costInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-cost`,
+  ) as HTMLInputElement;
+  const summaryEl = doc?.querySelector("#rate-limit-summary") as HTMLElement;
 
   const update = () => {
     if (!summaryEl) return;
-    const rpm = rpmInput?.value || '60';
-    const cost = costInput?.value || '0.02';
+    const rpm = rpmInput?.value || "60";
+    const cost = costInput?.value || "0.02";
     summaryEl.textContent = `RPM ${rpm} · $${cost}/M`;
   };
 
   update();
-  rpmInput?.addEventListener('change', update);
-  costInput?.addEventListener('change', update);
+  rpmInput?.addEventListener("change", update);
+  costInput?.addEventListener("change", update);
 }
 
-const PREF_SEMANTIC_ENABLED = 'extensions.zotero.zotero-mcp-plugin.semantic.enabled';
-const PREF_SERVER_ENABLED = 'extensions.zotero.zotero-mcp-plugin.mcp.server.enabled';
+const PREF_SEMANTIC_ENABLED =
+  "extensions.zotero.zotero-mcp-plugin.semantic.enabled";
+const PREF_SERVER_ENABLED =
+  "extensions.zotero.zotero-mcp-plugin.mcp.server.enabled";
 
 // Module-level flag: suppress logging during auto-refresh
 let _silentRefresh = false;
@@ -388,17 +545,21 @@ function bindSemanticEnabledToggle(doc: Document) {
   const checkbox = doc?.querySelector(
     `#zotero-prefpane-${config.addonRef}-semantic-enabled`,
   ) as HTMLInputElement;
-  const settingsContainer = doc?.querySelector('#semantic-settings-container') as HTMLElement;
-  const disabledHint = doc?.querySelector('#semantic-disabled-hint') as HTMLElement;
+  const settingsContainer = doc?.querySelector(
+    "#semantic-settings-container",
+  ) as HTMLElement;
+  const disabledHint = doc?.querySelector(
+    "#semantic-disabled-hint",
+  ) as HTMLElement;
 
   if (!checkbox) return;
 
   function updateSemanticUI(enabled: boolean) {
     if (settingsContainer) {
-      settingsContainer.style.display = enabled ? '' : 'none';
+      settingsContainer.style.display = enabled ? "" : "none";
     }
     if (disabledHint) {
-      disabledHint.style.display = enabled ? 'none' : 'block';
+      disabledHint.style.display = enabled ? "none" : "block";
     }
   }
 
@@ -417,67 +578,89 @@ function bindSemanticEnabledToggle(doc: Document) {
     const checked = checkbox.checked;
     Zotero.Prefs.set(PREF_SEMANTIC_ENABLED, checked, true);
     updateSemanticUI(checked);
-    ztoolkit.log(`[PreferenceScript] Semantic search ${checked ? 'enabled' : 'disabled'}`);
+    ztoolkit.log(
+      `[PreferenceScript] Semantic search ${checked ? "enabled" : "disabled"}`,
+    );
   });
 }
 
 // Embedding provider presets - only apiBase and hints, model/dimensions filled by user
-const EMBEDDING_PROVIDER_PRESETS: Record<string, { apiBase: string; modelPlaceholder: string; needsApiKey: boolean }> = {
+const EMBEDDING_PROVIDER_PRESETS: Record<
+  string,
+  { apiBase: string; modelPlaceholder: string; needsApiKey: boolean }
+> = {
   openai: {
     apiBase: "https://api.openai.com/v1",
     modelPlaceholder: "text-embedding-3-small",
-    needsApiKey: true
+    needsApiKey: true,
   },
   google: {
     apiBase: "https://generativelanguage.googleapis.com/v1beta/openai",
     modelPlaceholder: "gemini-embedding-001",
-    needsApiKey: true
+    needsApiKey: true,
   },
   alibaba: {
     apiBase: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     modelPlaceholder: "text-embedding-v3",
-    needsApiKey: true
+    needsApiKey: true,
   },
   zhipu: {
     apiBase: "https://open.bigmodel.cn/api/paas/v4",
     modelPlaceholder: "embedding-3",
-    needsApiKey: true
+    needsApiKey: true,
   },
   openrouter: {
     apiBase: "https://openrouter.ai/api/v1",
     modelPlaceholder: "openai/text-embedding-3-small",
-    needsApiKey: true
+    needsApiKey: true,
   },
   siliconflow: {
     apiBase: "https://api.siliconflow.cn/v1",
     modelPlaceholder: "BAAI/bge-m3",
-    needsApiKey: true
+    needsApiKey: true,
   },
   voyage: {
     apiBase: "https://api.voyageai.com/v1",
     modelPlaceholder: "voyage-3-lite",
-    needsApiKey: true
+    needsApiKey: true,
   },
   ollama: {
     apiBase: "http://localhost:11434/v1",
     modelPlaceholder: "nomic-embed-text",
-    needsApiKey: false
-  }
+    needsApiKey: false,
+  },
 };
 
 /**
  * Bind embedding API settings handlers
  */
 function bindEmbeddingSettings(doc: Document) {
-  const providerSelect = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-provider`) as HTMLSelectElement;
-  const apiBaseInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-api-base`) as HTMLInputElement;
-  const apiKeyInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-api-key`) as HTMLInputElement;
-  const modelInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-model`) as HTMLInputElement;
-  const dimensionsInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-dimensions`) as HTMLInputElement;
-  const dimensionsRow = dimensionsInput?.closest('.zmp-fg') || dimensionsInput?.parentElement;
-  const timeoutInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-timeout`) as HTMLInputElement;
-  const testButton = doc?.querySelector("#test-embedding-button") as HTMLButtonElement;
-  const testResult = doc?.querySelector("#embedding-test-result") as HTMLSpanElement;
+  const providerSelect = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-provider`,
+  ) as HTMLSelectElement;
+  const apiBaseInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-api-base`,
+  ) as HTMLInputElement;
+  const apiKeyInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-api-key`,
+  ) as HTMLInputElement;
+  const modelInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-model`,
+  ) as HTMLInputElement;
+  const dimensionsInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-dimensions`,
+  ) as HTMLInputElement;
+  const dimensionsRow =
+    dimensionsInput?.closest(".zmp-fg") || dimensionsInput?.parentElement;
+  const timeoutInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-timeout`,
+  ) as HTMLInputElement;
+  const testButton = doc?.querySelector(
+    "#test-embedding-button",
+  ) as HTMLButtonElement;
+  const testResult = doc?.querySelector(
+    "#embedding-test-result",
+  ) as HTMLSpanElement;
 
   // Detect current provider from saved apiBase
   const detectProvider = (apiBase: string): string => {
@@ -495,25 +678,50 @@ function bindEmbeddingSettings(doc: Document) {
 
   // Initialize provider select from saved apiBase
   if (providerSelect) {
-    const savedApiBase = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.apiBase", true) as string;
+    const savedApiBase = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.embedding.apiBase",
+      true,
+    ) as string;
     providerSelect.value = detectProvider(savedApiBase || "");
   }
 
   // Initialize input values from preferences
-  const initValue = (input: HTMLInputElement, prefKey: string, defaultValue: string) => {
+  const initValue = (
+    input: HTMLInputElement,
+    prefKey: string,
+    defaultValue: string,
+  ) => {
     if (input) {
       const value = Zotero.Prefs.get(prefKey, true);
       input.value = value ? String(value) : defaultValue;
     }
   };
 
-  initValue(apiBaseInput, "extensions.zotero.zotero-mcp-plugin.embedding.apiBase", "https://api.openai.com/v1");
-  initValue(apiKeyInput, "extensions.zotero.zotero-mcp-plugin.embedding.apiKey", "");
-  initValue(modelInput, "extensions.zotero.zotero-mcp-plugin.embedding.model", "text-embedding-3-small");
-  initValue(dimensionsInput, "extensions.zotero.zotero-mcp-plugin.embedding.dimensions", "512");
+  initValue(
+    apiBaseInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.apiBase",
+    "https://api.openai.com/v1",
+  );
+  initValue(
+    apiKeyInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.apiKey",
+    "",
+  );
+  initValue(
+    modelInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.model",
+    "text-embedding-3-small",
+  );
+  initValue(
+    dimensionsInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.dimensions",
+    "512",
+  );
 
   // API endpoint preview
-  const endpointPreview = doc?.querySelector("#embedding-api-endpoint-preview") as HTMLElement;
+  const endpointPreview = doc?.querySelector(
+    "#embedding-api-endpoint-preview",
+  ) as HTMLElement;
   const updateEndpointPreview = () => {
     if (!endpointPreview) return;
     const base = apiBaseInput?.value?.trim() || "";
@@ -534,9 +742,14 @@ function bindEmbeddingSettings(doc: Document) {
   // the native /api/embed body, so allow manual entry for them too (#62)
   const supportsCustomDimensions = (model: string) => {
     const m = model.toLowerCase();
-    return m.includes('text-embedding-3') || m.includes('text-embedding-v3') ||
-      m.includes('text-embedding-v4') || m.includes('qwen3-embedding') ||
-      m.includes('embeddinggemma') || m.includes('nomic-embed');
+    return (
+      m.includes("text-embedding-3") ||
+      m.includes("text-embedding-v3") ||
+      m.includes("text-embedding-v4") ||
+      m.includes("qwen3-embedding") ||
+      m.includes("embeddinggemma") ||
+      m.includes("nomic-embed")
+    );
   };
 
   // Update dimensions input visibility based on model
@@ -547,7 +760,8 @@ function bindEmbeddingSettings(doc: Document) {
     if (dimensionsInput) {
       dimensionsInput.disabled = !supportsCustom;
       if (!supportsCustom) {
-        dimensionsInput.placeholder = getString("pref-embedding-dimensions-auto" as any) || "Auto";
+        dimensionsInput.placeholder =
+          getString("pref-embedding-dimensions-auto" as any) || "Auto";
       } else {
         dimensionsInput.placeholder = "";
       }
@@ -557,7 +771,10 @@ function bindEmbeddingSettings(doc: Document) {
     if (dimensionsRow && testResult) {
       if (!supportsCustom) {
         // For non-supporting models, show info about auto-detection
-        const detectedDims = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.detectedDimensions", true);
+        const detectedDims = Zotero.Prefs.get(
+          "extensions.zotero.zotero-mcp-plugin.embedding.detectedDimensions",
+          true,
+        );
         if (detectedDims) {
           testResult.textContent = `${getString("pref-embedding-detected-dims" as any) || "Detected dimensions"}: ${detectedDims}`;
           testResult.style.color = "var(--color-muted)";
@@ -579,7 +796,11 @@ function bindEmbeddingSettings(doc: Document) {
         // Only fill in API Base URL
         if (apiBaseInput) {
           apiBaseInput.value = preset.apiBase;
-          Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.embedding.apiBase", preset.apiBase, true);
+          Zotero.Prefs.set(
+            "extensions.zotero.zotero-mcp-plugin.embedding.apiBase",
+            preset.apiBase,
+            true,
+          );
         }
 
         // Update model placeholder hint (don't change the value)
@@ -589,7 +810,10 @@ function bindEmbeddingSettings(doc: Document) {
 
         // Update API key placeholder hint based on whether it's needed
         if (apiKeyInput) {
-          apiKeyInput.placeholder = preset.needsApiKey ? "sk-..." : getString("pref-embedding-api-key-optional" as any) || "(Optional)";
+          apiKeyInput.placeholder = preset.needsApiKey
+            ? "sk-..."
+            : getString("pref-embedding-api-key-optional" as any) ||
+              "(Optional)";
         }
 
         // Update embedding service config
@@ -604,26 +828,47 @@ function bindEmbeddingSettings(doc: Document) {
   }
 
   // Save preference on change
-  const bindSave = (input: HTMLInputElement, prefKey: string, isNumber = false) => {
+  const bindSave = (
+    input: HTMLInputElement,
+    prefKey: string,
+    isNumber = false,
+  ) => {
     input?.addEventListener("change", () => {
       const value = isNumber ? parseInt(input.value, 10) : input.value;
       Zotero.Prefs.set(prefKey, value, true);
-      ztoolkit.log(`[PreferenceScript] Saved embedding pref: ${prefKey} = ${value}`);
+      ztoolkit.log(
+        `[PreferenceScript] Saved embedding pref: ${prefKey} = ${value}`,
+      );
 
       // Update embedding service config
       updateEmbeddingServiceConfig();
     });
   };
 
-  bindSave(apiBaseInput, "extensions.zotero.zotero-mcp-plugin.embedding.apiBase");
+  bindSave(
+    apiBaseInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.apiBase",
+  );
   bindSave(apiKeyInput, "extensions.zotero.zotero-mcp-plugin.embedding.apiKey");
-  bindSave(dimensionsInput, "extensions.zotero.zotero-mcp-plugin.embedding.dimensions", true);
-  bindSave(timeoutInput, "extensions.zotero.zotero-mcp-plugin.embedding.timeoutSeconds", true);
+  bindSave(
+    dimensionsInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.dimensions",
+    true,
+  );
+  bindSave(
+    timeoutInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.timeoutSeconds",
+    true,
+  );
 
   // Model change handler - update dimensions visibility and clear detected dimensions
   modelInput?.addEventListener("change", async () => {
     const model = modelInput.value;
-    Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.embedding.model", model, true);
+    Zotero.Prefs.set(
+      "extensions.zotero.zotero-mcp-plugin.embedding.model",
+      model,
+      true,
+    );
     ztoolkit.log(`[PreferenceScript] Saved embedding pref: model = ${model}`);
 
     // Clear detected dimensions when model changes
@@ -645,11 +890,14 @@ function bindEmbeddingSettings(doc: Document) {
         // Show warning alert
         addon.data.prefs!.window.alert(
           getString("pref-embedding-model-change-warning" as any) ||
-          "模型已更改，已有索引可能不兼容。请测试连接后重建索引。\n\nModel changed. Existing index may be incompatible. Please test connection and rebuild index."
+            "模型已更改，已有索引可能不兼容。请测试连接后重建索引。\n\nModel changed. Existing index may be incompatible. Please test connection and rebuild index.",
         );
       }
     } catch (e) {
-      ztoolkit.log(`[PreferenceScript] Failed to check existing index: ${e}`, 'warn');
+      ztoolkit.log(
+        `[PreferenceScript] Failed to check existing index: ${e}`,
+        "warn",
+      );
     }
 
     // Update visibility
@@ -661,7 +909,8 @@ function bindEmbeddingSettings(doc: Document) {
 
   // Test connection button
   testButton?.addEventListener("click", async () => {
-    testResult.textContent = getString("pref-embedding-testing" as any) || "Testing...";
+    testResult.textContent =
+      getString("pref-embedding-testing" as any) || "Testing...";
     testResult.style.color = "var(--color-muted)";
     testButton.disabled = true;
 
@@ -672,7 +921,9 @@ function bindEmbeddingSettings(doc: Document) {
       const model = modelInput?.value?.trim() || "";
 
       if (!apiBase || !model) {
-        testResult.textContent = getString("pref-embedding-test-failed" as any) + ": Missing API Base or Model";
+        testResult.textContent =
+          getString("pref-embedding-test-failed" as any) +
+          ": Missing API Base or Model";
         testResult.style.color = "var(--color-error)";
         testButton.disabled = false;
         return;
@@ -680,42 +931,61 @@ function bindEmbeddingSettings(doc: Document) {
 
       // Test the connection using Zotero.HTTP
       const url = `${apiBase}/embeddings`;
-      const response = await Zotero.HTTP.request('POST', url, {
+      const response = await Zotero.HTTP.request("POST", url, {
         headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {})
+          "Content-Type": "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
         body: JSON.stringify({
           model: model,
           input: ["test"],
           // Send the same dimensions indexing will use, otherwise detected
           // dims diverge from index dims into a permanent mismatch (#62)
-          ...((supportsCustomDimensions(model) && parseInt(dimensionsInput?.value || "", 10) > 0)
-            ? { dimensions: parseInt(dimensionsInput.value, 10) } : {})
+          ...(supportsCustomDimensions(model) &&
+          parseInt(dimensionsInput?.value || "", 10) > 0
+            ? { dimensions: parseInt(dimensionsInput.value, 10) }
+            : {}),
         }),
         timeout: (getEmbeddingTimeoutSeconds() || 30) * 1000,
-        responseType: 'json',
-        successCodes: false // Don't throw on non-2xx, let us handle it
+        responseType: "json",
+        successCodes: false, // Don't throw on non-2xx, let us handle it
       } as any);
 
       // Check HTTP status
       if (response.status < 200 || response.status >= 300) {
         let responseBody = "";
         try {
-          responseBody = typeof response.response === 'object'
-            ? JSON.stringify(response.response, null, 2)
-            : (response.responseText || String(response.response || ""));
-        } catch { responseBody = response.responseText || ""; }
+          responseBody =
+            typeof response.response === "object"
+              ? JSON.stringify(response.response, null, 2)
+              : response.responseText || String(response.response || "");
+        } catch {
+          responseBody = response.responseText || "";
+        }
 
         const code = response.status;
         const hints: Record<number, string> = {
-          401: getString("pref-embedding-test-error-401" as any) || "Authentication failed - check your API key",
-          403: getString("pref-embedding-test-error-403" as any) || "Access forbidden - check API key permissions",
-          404: getString("pref-embedding-test-error-404" as any) || "Endpoint not found - check API base URL",
-          429: getString("pref-embedding-test-error-429" as any) || "Rate limited - try again later",
-          500: getString("pref-embedding-test-error-5xx" as any) || "Server error - try again later",
-          502: getString("pref-embedding-test-error-5xx" as any) || "Server error - try again later",
-          503: getString("pref-embedding-test-error-5xx" as any) || "Server error - try again later",
+          401:
+            getString("pref-embedding-test-error-401" as any) ||
+            "Authentication failed - check your API key",
+          403:
+            getString("pref-embedding-test-error-403" as any) ||
+            "Access forbidden - check API key permissions",
+          404:
+            getString("pref-embedding-test-error-404" as any) ||
+            "Endpoint not found - check API base URL",
+          429:
+            getString("pref-embedding-test-error-429" as any) ||
+            "Rate limited - try again later",
+          500:
+            getString("pref-embedding-test-error-5xx" as any) ||
+            "Server error - try again later",
+          502:
+            getString("pref-embedding-test-error-5xx" as any) ||
+            "Server error - try again later",
+          503:
+            getString("pref-embedding-test-error-5xx" as any) ||
+            "Server error - try again later",
         };
         const hint = `HTTP ${code}: ${hints[code] || "Request failed"}`;
 
@@ -727,20 +997,28 @@ function bindEmbeddingSettings(doc: Document) {
 
         if (responseBody) {
           const detailWrap = doc.createElement("details");
-          detailWrap.style.cssText = "margin-top:4px; font-size:11px; color:var(--text-2);";
+          detailWrap.style.cssText =
+            "margin-top:4px; font-size:11px; color:var(--text-2);";
           const summary = doc.createElement("summary");
-          summary.textContent = getString("pref-embedding-test-error-detail" as any) || "Show raw response";
-          summary.style.cssText = "cursor:pointer; color:var(--text-3); user-select:none;";
+          summary.textContent =
+            getString("pref-embedding-test-error-detail" as any) ||
+            "Show raw response";
+          summary.style.cssText =
+            "cursor:pointer; color:var(--text-3); user-select:none;";
           const pre = doc.createElement("pre");
           pre.textContent = responseBody;
-          pre.style.cssText = "margin:4px 0 0; white-space:pre-wrap; word-break:break-all; font-size:11px; font-family:'SF Mono',Consolas,monospace; background:var(--bg-muted); padding:6px 8px; border-radius:4px; max-height:200px; overflow-y:auto; color:var(--text);";
+          pre.style.cssText =
+            "margin:4px 0 0; white-space:pre-wrap; word-break:break-all; font-size:11px; font-family:'SF Mono',Consolas,monospace; background:var(--bg-muted); padding:6px 8px; border-radius:4px; max-height:200px; overflow-y:auto; color:var(--text);";
           detailWrap.appendChild(summary);
           detailWrap.appendChild(pre);
           testResult.appendChild(detailWrap);
         }
 
         testButton.disabled = false;
-        ztoolkit.log(`[PreferenceScript] Embedding test failed: HTTP ${code} - ${responseBody}`, "warn");
+        ztoolkit.log(
+          `[PreferenceScript] Embedding test failed: HTTP ${code} - ${responseBody}`,
+          "warn",
+        );
         return;
       }
 
@@ -769,26 +1047,41 @@ function bindEmbeddingSettings(doc: Document) {
           testResult.style.color = "var(--color-warn)";
 
           // Save detected dimensions but don't update config dimensions
-          Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.embedding.detectedDimensions", dims, true);
+          Zotero.Prefs.set(
+            "extensions.zotero.zotero-mcp-plugin.embedding.detectedDimensions",
+            dims,
+            true,
+          );
         } else {
           // No mismatch or no existing vectors - safe to update
-          testResult.textContent = getString("pref-embedding-test-success" as any) + ` (${dims} dims)`;
+          testResult.textContent =
+            getString("pref-embedding-test-success" as any) + ` (${dims} dims)`;
           testResult.style.color = "var(--color-ok)";
 
           // Update dimensions
           if (dims > 0) {
             // Save detected dimensions
-            Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.embedding.detectedDimensions", dims, true);
+            Zotero.Prefs.set(
+              "extensions.zotero.zotero-mcp-plugin.embedding.detectedDimensions",
+              dims,
+              true,
+            );
 
             // Only update config dimensions for models that support custom dimensions
             if (supportsCustomDimensions(model) && dimensionsInput) {
               dimensionsInput.value = String(dims);
-              Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.embedding.dimensions", dims, true);
+              Zotero.Prefs.set(
+                "extensions.zotero.zotero-mcp-plugin.embedding.dimensions",
+                dims,
+                true,
+              );
             }
 
             // Update embedding service
             try {
-              const { getEmbeddingService } = require("./semantic/embeddingService");
+              const {
+                getEmbeddingService,
+              } = require("./semantic/embeddingService");
               const embeddingService = getEmbeddingService();
               embeddingService.updateConfig({ dimensions: dims });
             } catch (e) {
@@ -797,7 +1090,8 @@ function bindEmbeddingSettings(doc: Document) {
           }
         }
       } else {
-        testResult.textContent = getString("pref-embedding-test-failed" as any) + ": Invalid response";
+        testResult.textContent =
+          getString("pref-embedding-test-failed" as any) + ": Invalid response";
         testResult.style.color = "var(--color-error)";
       }
     } catch (error: any) {
@@ -812,7 +1106,9 @@ function bindEmbeddingSettings(doc: Document) {
         } else if (error.responseText) {
           responseBody = error.responseText;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       // Extract HTTP status code from error message
       const statusMatch = fullMsg.match(/status code (\d+)/);
@@ -820,17 +1116,32 @@ function bindEmbeddingSettings(doc: Document) {
       if (statusMatch) {
         const code = parseInt(statusMatch[1], 10);
         const hints: Record<number, string> = {
-          401: getString("pref-embedding-test-error-401" as any) || "Authentication failed - check your API key",
-          403: getString("pref-embedding-test-error-403" as any) || "Access forbidden - check API key permissions",
-          404: getString("pref-embedding-test-error-404" as any) || "Endpoint not found - check API base URL",
-          429: getString("pref-embedding-test-error-429" as any) || "Rate limited - try again later",
-          500: getString("pref-embedding-test-error-5xx" as any) || "Server error - try again later",
-          502: getString("pref-embedding-test-error-5xx" as any) || "Server error - try again later",
-          503: getString("pref-embedding-test-error-5xx" as any) || "Server error - try again later",
+          401:
+            getString("pref-embedding-test-error-401" as any) ||
+            "Authentication failed - check your API key",
+          403:
+            getString("pref-embedding-test-error-403" as any) ||
+            "Access forbidden - check API key permissions",
+          404:
+            getString("pref-embedding-test-error-404" as any) ||
+            "Endpoint not found - check API base URL",
+          429:
+            getString("pref-embedding-test-error-429" as any) ||
+            "Rate limited - try again later",
+          500:
+            getString("pref-embedding-test-error-5xx" as any) ||
+            "Server error - try again later",
+          502:
+            getString("pref-embedding-test-error-5xx" as any) ||
+            "Server error - try again later",
+          503:
+            getString("pref-embedding-test-error-5xx" as any) ||
+            "Server error - try again later",
         };
         hint = `HTTP ${code}: ${hints[code] || "Request failed"}`;
       } else {
-        hint = fullMsg.length > 100 ? fullMsg.substring(0, 100) + "..." : fullMsg;
+        hint =
+          fullMsg.length > 100 ? fullMsg.substring(0, 100) + "..." : fullMsg;
       }
 
       const rawContent = responseBody || fullMsg;
@@ -843,18 +1154,26 @@ function bindEmbeddingSettings(doc: Document) {
 
       // Collapsible raw response
       const detailWrap = doc.createElement("details");
-      detailWrap.style.cssText = "margin-top:4px; font-size:11px; color:var(--text-2);";
+      detailWrap.style.cssText =
+        "margin-top:4px; font-size:11px; color:var(--text-2);";
       const summary = doc.createElement("summary");
-      summary.textContent = getString("pref-embedding-test-error-detail" as any) || "Show raw response";
-      summary.style.cssText = "cursor:pointer; color:var(--text-3); user-select:none;";
+      summary.textContent =
+        getString("pref-embedding-test-error-detail" as any) ||
+        "Show raw response";
+      summary.style.cssText =
+        "cursor:pointer; color:var(--text-3); user-select:none;";
       const pre = doc.createElement("pre");
       pre.textContent = rawContent;
-      pre.style.cssText = "margin:4px 0 0; white-space:pre-wrap; word-break:break-all; font-size:11px; font-family:'SF Mono',Consolas,monospace; background:var(--bg-muted); padding:6px 8px; border-radius:4px; max-height:200px; overflow-y:auto; color:var(--text);";
+      pre.style.cssText =
+        "margin:4px 0 0; white-space:pre-wrap; word-break:break-all; font-size:11px; font-family:'SF Mono',Consolas,monospace; background:var(--bg-muted); padding:6px 8px; border-radius:4px; max-height:200px; overflow-y:auto; color:var(--text);";
       detailWrap.appendChild(summary);
       detailWrap.appendChild(pre);
       testResult.appendChild(detailWrap);
 
-      ztoolkit.log(`[PreferenceScript] Embedding test failed: ${error}`, "warn");
+      ztoolkit.log(
+        `[PreferenceScript] Embedding test failed: ${error}`,
+        "warn",
+      );
     } finally {
       testButton.disabled = false;
     }
@@ -870,7 +1189,10 @@ function bindEmbeddingSettings(doc: Document) {
  */
 function getEmbeddingTimeoutSeconds(): number {
   try {
-    const raw = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.timeoutSeconds", true);
+    const raw = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.embedding.timeoutSeconds",
+      true,
+    );
     const seconds = parseInt(String(raw ?? ""), 10);
     if (isNaN(seconds) || seconds <= 0) return 0;
     return Math.min(600, Math.max(5, seconds));
@@ -885,10 +1207,25 @@ function updateEmbeddingServiceConfig() {
     const { getEmbeddingService } = require("./semantic/embeddingService");
     const embeddingService = getEmbeddingService();
 
-    const apiBase = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.apiBase", true) || "";
-    const apiKey = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.apiKey", true) || "";
-    const model = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.model", true) || "";
-    const dimensions = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.dimensions", true);
+    const apiBase =
+      Zotero.Prefs.get(
+        "extensions.zotero.zotero-mcp-plugin.embedding.apiBase",
+        true,
+      ) || "";
+    const apiKey =
+      Zotero.Prefs.get(
+        "extensions.zotero.zotero-mcp-plugin.embedding.apiKey",
+        true,
+      ) || "";
+    const model =
+      Zotero.Prefs.get(
+        "extensions.zotero.zotero-mcp-plugin.embedding.model",
+        true,
+      ) || "";
+    const dimensions = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.embedding.dimensions",
+      true,
+    );
     const timeoutSeconds = getEmbeddingTimeoutSeconds();
 
     embeddingService.updateConfig({
@@ -896,12 +1233,15 @@ function updateEmbeddingServiceConfig() {
       apiKey: apiKey as string,
       model: model as string,
       dimensions: dimensions ? parseInt(String(dimensions), 10) : undefined,
-      ...(timeoutSeconds ? { timeout: timeoutSeconds * 1000 } : {})
+      ...(timeoutSeconds ? { timeout: timeoutSeconds * 1000 } : {}),
     });
 
     ztoolkit.log(`[PreferenceScript] Updated embedding service config`);
   } catch (error) {
-    ztoolkit.log(`[PreferenceScript] Failed to update embedding service: ${error}`, "warn");
+    ztoolkit.log(
+      `[PreferenceScript] Failed to update embedding service: ${error}`,
+      "warn",
+    );
   }
 }
 
@@ -910,39 +1250,88 @@ function updateEmbeddingServiceConfig() {
  */
 function bindApiUsageStats(doc: Document) {
   // Rate limit inputs
-  const rpmInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-rpm`) as HTMLInputElement;
-  const tpmInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-tpm`) as HTMLInputElement;
-  const costInput = doc?.querySelector(`#zotero-prefpane-${config.addonRef}-embedding-cost`) as HTMLInputElement;
+  const rpmInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-rpm`,
+  ) as HTMLInputElement;
+  const tpmInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-tpm`,
+  ) as HTMLInputElement;
+  const costInput = doc?.querySelector(
+    `#zotero-prefpane-${config.addonRef}-embedding-cost`,
+  ) as HTMLInputElement;
 
   // Usage stats elements
-  const totalTokensEl = doc?.querySelector("#api-usage-total-tokens") as HTMLElement;
-  const totalRequestsEl = doc?.querySelector("#api-usage-total-requests") as HTMLElement;
-  const totalTextsEl = doc?.querySelector("#api-usage-total-texts") as HTMLElement;
-  const estimatedCostEl = doc?.querySelector("#api-usage-estimated-cost") as HTMLElement;
-  const sessionTokensEl = doc?.querySelector("#api-usage-session-tokens") as HTMLElement;
-  const sessionRequestsEl = doc?.querySelector("#api-usage-session-requests") as HTMLElement;
-  const currentRpmEl = doc?.querySelector("#api-usage-current-rpm") as HTMLElement;
-  const currentTpmEl = doc?.querySelector("#api-usage-current-tpm") as HTMLElement;
-  const rateLimitHitsEl = doc?.querySelector("#api-usage-rate-limit-hits") as HTMLElement;
+  const totalTokensEl = doc?.querySelector(
+    "#api-usage-total-tokens",
+  ) as HTMLElement;
+  const totalRequestsEl = doc?.querySelector(
+    "#api-usage-total-requests",
+  ) as HTMLElement;
+  const totalTextsEl = doc?.querySelector(
+    "#api-usage-total-texts",
+  ) as HTMLElement;
+  const estimatedCostEl = doc?.querySelector(
+    "#api-usage-estimated-cost",
+  ) as HTMLElement;
+  const sessionTokensEl = doc?.querySelector(
+    "#api-usage-session-tokens",
+  ) as HTMLElement;
+  const sessionRequestsEl = doc?.querySelector(
+    "#api-usage-session-requests",
+  ) as HTMLElement;
+  const currentRpmEl = doc?.querySelector(
+    "#api-usage-current-rpm",
+  ) as HTMLElement;
+  const currentTpmEl = doc?.querySelector(
+    "#api-usage-current-tpm",
+  ) as HTMLElement;
+  const rateLimitHitsEl = doc?.querySelector(
+    "#api-usage-rate-limit-hits",
+  ) as HTMLElement;
 
   // Buttons
-  const refreshButton = doc?.querySelector("#refresh-api-usage-button") as HTMLButtonElement;
-  const resetButton = doc?.querySelector("#reset-api-usage-button") as HTMLButtonElement;
+  const refreshButton = doc?.querySelector(
+    "#refresh-api-usage-button",
+  ) as HTMLButtonElement;
+  const resetButton = doc?.querySelector(
+    "#reset-api-usage-button",
+  ) as HTMLButtonElement;
 
   // Initialize rate limit inputs from preferences
-  const initRateLimitValue = (input: HTMLInputElement, prefKey: string, defaultValue: string) => {
+  const initRateLimitValue = (
+    input: HTMLInputElement,
+    prefKey: string,
+    defaultValue: string,
+  ) => {
     if (input) {
       const value = Zotero.Prefs.get(prefKey, true);
-      input.value = value !== undefined && value !== null ? String(value) : defaultValue;
+      input.value =
+        value !== undefined && value !== null ? String(value) : defaultValue;
     }
   };
 
-  initRateLimitValue(rpmInput, "extensions.zotero.zotero-mcp-plugin.embedding.rpm", "60");
-  initRateLimitValue(tpmInput, "extensions.zotero.zotero-mcp-plugin.embedding.tpm", "150000");
-  initRateLimitValue(costInput, "extensions.zotero.zotero-mcp-plugin.embedding.costPer1M", "0.02");
+  initRateLimitValue(
+    rpmInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.rpm",
+    "60",
+  );
+  initRateLimitValue(
+    tpmInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.tpm",
+    "150000",
+  );
+  initRateLimitValue(
+    costInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.costPer1M",
+    "0.02",
+  );
 
   // Save rate limit on change
-  const bindRateLimitSave = (input: HTMLInputElement, prefKey: string, isFloat = false) => {
+  const bindRateLimitSave = (
+    input: HTMLInputElement,
+    prefKey: string,
+    isFloat = false,
+  ) => {
     input?.addEventListener("change", () => {
       let value: number;
       if (isFloat) {
@@ -951,16 +1340,28 @@ function bindApiUsageStats(doc: Document) {
         value = parseInt(input.value, 10) || 0;
       }
       Zotero.Prefs.set(prefKey, isFloat ? String(value) : value, true);
-      ztoolkit.log(`[PreferenceScript] Saved rate limit pref: ${prefKey} = ${value}`);
+      ztoolkit.log(
+        `[PreferenceScript] Saved rate limit pref: ${prefKey} = ${value}`,
+      );
 
       // Update embedding service rate limit config
       updateEmbeddingServiceRateLimits();
     });
   };
 
-  bindRateLimitSave(rpmInput, "extensions.zotero.zotero-mcp-plugin.embedding.rpm");
-  bindRateLimitSave(tpmInput, "extensions.zotero.zotero-mcp-plugin.embedding.tpm");
-  bindRateLimitSave(costInput, "extensions.zotero.zotero-mcp-plugin.embedding.costPer1M", true);
+  bindRateLimitSave(
+    rpmInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.rpm",
+  );
+  bindRateLimitSave(
+    tpmInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.tpm",
+  );
+  bindRateLimitSave(
+    costInput,
+    "extensions.zotero.zotero-mcp-plugin.embedding.costPer1M",
+    true,
+  );
 
   // Load usage stats on page load
   loadApiUsageStats();
@@ -972,7 +1373,9 @@ function bindApiUsageStats(doc: Document) {
 
   // Reset button
   resetButton?.addEventListener("click", () => {
-    const confirmMsg = getString("pref-api-usage-reset-confirm" as any) || "Are you sure you want to reset all API usage statistics?";
+    const confirmMsg =
+      getString("pref-api-usage-reset-confirm" as any) ||
+      "Are you sure you want to reset all API usage statistics?";
     if (addon.data.prefs!.window.confirm(confirmMsg)) {
       resetApiUsageStats();
     }
@@ -992,22 +1395,33 @@ function bindApiUsageStats(doc: Document) {
       const formatNum = (n: number) => n.toLocaleString();
 
       // Update UI elements
-      if (totalTokensEl) totalTokensEl.textContent = formatNum(stats.totalTokens);
-      if (totalRequestsEl) totalRequestsEl.textContent = formatNum(stats.totalRequests);
+      if (totalTokensEl)
+        totalTokensEl.textContent = formatNum(stats.totalTokens);
+      if (totalRequestsEl)
+        totalRequestsEl.textContent = formatNum(stats.totalRequests);
       if (totalTextsEl) totalTextsEl.textContent = formatNum(stats.totalTexts);
-      if (estimatedCostEl) estimatedCostEl.textContent = `$${stats.estimatedCostUsd.toFixed(4)}`;
-      if (sessionTokensEl) sessionTokensEl.textContent = formatNum(stats.sessionTokens);
-      if (sessionRequestsEl) sessionRequestsEl.textContent = formatNum(stats.sessionRequests);
+      if (estimatedCostEl)
+        estimatedCostEl.textContent = `$${stats.estimatedCostUsd.toFixed(4)}`;
+      if (sessionTokensEl)
+        sessionTokensEl.textContent = formatNum(stats.sessionTokens);
+      if (sessionRequestsEl)
+        sessionRequestsEl.textContent = formatNum(stats.sessionRequests);
       if (currentRpmEl) currentRpmEl.textContent = `${stats.currentRpm}`;
       if (currentTpmEl) currentTpmEl.textContent = formatNum(stats.currentTpm);
-      if (rateLimitHitsEl) rateLimitHitsEl.textContent = formatNum(stats.rateLimitHits);
+      if (rateLimitHitsEl)
+        rateLimitHitsEl.textContent = formatNum(stats.rateLimitHits);
 
       if (!_silentRefresh) {
-        ztoolkit.log(`[PreferenceScript] Loaded API usage stats: ${stats.totalTokens} tokens, ${stats.totalRequests} requests`);
+        ztoolkit.log(
+          `[PreferenceScript] Loaded API usage stats: ${stats.totalTokens} tokens, ${stats.totalRequests} requests`,
+        );
       }
     } catch (error) {
       if (!_silentRefresh) {
-        ztoolkit.log(`[PreferenceScript] Failed to load API usage stats: ${error}`, "warn");
+        ztoolkit.log(
+          `[PreferenceScript] Failed to load API usage stats: ${error}`,
+          "warn",
+        );
       }
       // Show error state
       if (totalTokensEl) totalTokensEl.textContent = "-";
@@ -1030,7 +1444,10 @@ function bindApiUsageStats(doc: Document) {
 
       ztoolkit.log("[PreferenceScript] Reset API usage stats");
     } catch (error) {
-      ztoolkit.log(`[PreferenceScript] Failed to reset API usage stats: ${error}`, "warn");
+      ztoolkit.log(
+        `[PreferenceScript] Failed to reset API usage stats: ${error}`,
+        "warn",
+      );
     }
   }
 }
@@ -1043,19 +1460,31 @@ function updateEmbeddingServiceRateLimits() {
     const { getEmbeddingService } = require("./semantic/embeddingService");
     const embeddingService = getEmbeddingService();
 
-    const rpm = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.rpm", true);
-    const tpm = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.tpm", true);
-    const costPer1M = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.costPer1M", true);
+    const rpm = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.embedding.rpm",
+      true,
+    );
+    const tpm = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.embedding.tpm",
+      true,
+    );
+    const costPer1M = Zotero.Prefs.get(
+      "extensions.zotero.zotero-mcp-plugin.embedding.costPer1M",
+      true,
+    );
 
     embeddingService.setRateLimitConfig({
       rpm: rpm ? parseInt(String(rpm), 10) : 60,
       tpm: tpm ? parseInt(String(tpm), 10) : 150000,
-      costPer1MTokens: costPer1M ? parseFloat(String(costPer1M)) : 0.02
+      costPer1MTokens: costPer1M ? parseFloat(String(costPer1M)) : 0.02,
     });
 
     ztoolkit.log(`[PreferenceScript] Updated embedding service rate limits`);
   } catch (error) {
-    ztoolkit.log(`[PreferenceScript] Failed to update rate limits: ${error}`, "warn");
+    ztoolkit.log(
+      `[PreferenceScript] Failed to update rate limits: ${error}`,
+      "warn",
+    );
   }
 }
 
@@ -1063,40 +1492,92 @@ function updateEmbeddingServiceRateLimits() {
  * Bind semantic stats display handlers
  */
 function bindSemanticStatsSettings(doc: Document) {
-  const loadingEl = doc?.querySelector("#semantic-stats-loading") as HTMLElement;
-  const contentEl = doc?.querySelector("#semantic-stats-content") as HTMLElement;
-  const refreshButton = doc?.querySelector("#refresh-semantic-stats-button") as HTMLButtonElement;
+  const loadingEl = doc?.querySelector(
+    "#semantic-stats-loading",
+  ) as HTMLElement;
+  const contentEl = doc?.querySelector(
+    "#semantic-stats-content",
+  ) as HTMLElement;
+  const refreshButton = doc?.querySelector(
+    "#refresh-semantic-stats-button",
+  ) as HTMLButtonElement;
 
-  const totalItemsEl = doc?.querySelector("#semantic-stats-total-items") as HTMLElement;
-  const totalVectorsEl = doc?.querySelector("#semantic-stats-total-vectors") as HTMLElement;
-  const zhVectorsEl = doc?.querySelector("#semantic-stats-zh-vectors") as HTMLElement;
-  const enVectorsEl = doc?.querySelector("#semantic-stats-en-vectors") as HTMLElement;
-  const cachedItemsEl = doc?.querySelector("#semantic-stats-cached-items") as HTMLElement;
-  const cacheSizeEl = doc?.querySelector("#semantic-stats-cache-size") as HTMLElement;
+  const totalItemsEl = doc?.querySelector(
+    "#semantic-stats-total-items",
+  ) as HTMLElement;
+  const totalVectorsEl = doc?.querySelector(
+    "#semantic-stats-total-vectors",
+  ) as HTMLElement;
+  const zhVectorsEl = doc?.querySelector(
+    "#semantic-stats-zh-vectors",
+  ) as HTMLElement;
+  const enVectorsEl = doc?.querySelector(
+    "#semantic-stats-en-vectors",
+  ) as HTMLElement;
+  const cachedItemsEl = doc?.querySelector(
+    "#semantic-stats-cached-items",
+  ) as HTMLElement;
+  const cacheSizeEl = doc?.querySelector(
+    "#semantic-stats-cache-size",
+  ) as HTMLElement;
   const dbSizeEl = doc?.querySelector("#semantic-stats-db-size") as HTMLElement;
-  const dimensionsEl = doc?.querySelector("#semantic-stats-dimensions") as HTMLElement;
-  const int8StatusEl = doc?.querySelector("#semantic-stats-int8-status") as HTMLElement;
+  const dimensionsEl = doc?.querySelector(
+    "#semantic-stats-dimensions",
+  ) as HTMLElement;
+  const int8StatusEl = doc?.querySelector(
+    "#semantic-stats-int8-status",
+  ) as HTMLElement;
   const statusEl = doc?.querySelector("#semantic-stats-status") as HTMLElement;
 
   // Index control elements
-  const buildButton = doc?.querySelector("#build-semantic-index-button") as HTMLButtonElement;
-  const rebuildButton = doc?.querySelector("#rebuild-semantic-index-button") as HTMLButtonElement;
-  const retryFailedButton = doc?.querySelector("#retry-failed-index-button") as HTMLButtonElement;
-  const clearButton = doc?.querySelector("#clear-semantic-index-button") as HTMLButtonElement;
-  const pauseButton = doc?.querySelector("#pause-semantic-index-button") as HTMLButtonElement;
-  const resumeButton = doc?.querySelector("#resume-semantic-index-button") as HTMLButtonElement;
-  const abortButton = doc?.querySelector("#abort-semantic-index-button") as HTMLButtonElement;
-  const progressContainer = doc?.querySelector("#semantic-index-progress-container") as HTMLElement;
-  const progressText = doc?.querySelector("#semantic-index-progress-text") as HTMLElement;
-  const progressPercent = doc?.querySelector("#semantic-index-progress-percent") as HTMLElement;
-  const progressBar = doc?.querySelector("#semantic-index-progress-bar") as HTMLElement;
-  const currentItemEl = doc?.querySelector("#semantic-index-current-item") as HTMLElement;
+  const buildButton = doc?.querySelector(
+    "#build-semantic-index-button",
+  ) as HTMLButtonElement;
+  const rebuildButton = doc?.querySelector(
+    "#rebuild-semantic-index-button",
+  ) as HTMLButtonElement;
+  const retryFailedButton = doc?.querySelector(
+    "#retry-failed-index-button",
+  ) as HTMLButtonElement;
+  const clearButton = doc?.querySelector(
+    "#clear-semantic-index-button",
+  ) as HTMLButtonElement;
+  const pauseButton = doc?.querySelector(
+    "#pause-semantic-index-button",
+  ) as HTMLButtonElement;
+  const resumeButton = doc?.querySelector(
+    "#resume-semantic-index-button",
+  ) as HTMLButtonElement;
+  const abortButton = doc?.querySelector(
+    "#abort-semantic-index-button",
+  ) as HTMLButtonElement;
+  const progressContainer = doc?.querySelector(
+    "#semantic-index-progress-container",
+  ) as HTMLElement;
+  const progressText = doc?.querySelector(
+    "#semantic-index-progress-text",
+  ) as HTMLElement;
+  const progressPercent = doc?.querySelector(
+    "#semantic-index-progress-percent",
+  ) as HTMLElement;
+  const progressBar = doc?.querySelector(
+    "#semantic-index-progress-bar",
+  ) as HTMLElement;
+  const currentItemEl = doc?.querySelector(
+    "#semantic-index-current-item",
+  ) as HTMLElement;
   const etaEl = doc?.querySelector("#semantic-index-eta") as HTMLElement;
-  const messageEl = doc?.querySelector("#semantic-index-message") as HTMLElement;
+  const messageEl = doc?.querySelector(
+    "#semantic-index-message",
+  ) as HTMLElement;
 
   let isIndexing = false;
   let progressUpdateInterval: ReturnType<typeof setInterval> | null = null;
-  let lastErrorInfo: { message: string; type: string; retryable: boolean } | null = null;
+  let lastErrorInfo: {
+    message: string;
+    type: string;
+    retryable: boolean;
+  } | null = null;
   let messageTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Load stats on page load
@@ -1109,7 +1590,9 @@ function bindSemanticStatsSettings(doc: Document) {
   function refreshAllStats(silent = false) {
     _silentRefresh = silent;
     loadSemanticStats(silent);
-    const apiRefreshBtn = doc?.querySelector("#refresh-api-usage-button") as HTMLButtonElement;
+    const apiRefreshBtn = doc?.querySelector(
+      "#refresh-api-usage-button",
+    ) as HTMLButtonElement;
     apiRefreshBtn?.click();
     _silentRefresh = false;
   }
@@ -1133,7 +1616,9 @@ function bindSemanticStatsSettings(doc: Document) {
   const prefsWindow = doc?.defaultView;
   prefsWindow?.addEventListener("unload", () => {
     clearInterval(autoRefreshInterval);
-    ztoolkit.log("[PreferenceScript] Auto-refresh interval cleared on window unload");
+    ztoolkit.log(
+      "[PreferenceScript] Auto-refresh interval cleared on window unload",
+    );
   });
 
   // Build index button
@@ -1143,7 +1628,9 @@ function bindSemanticStatsSettings(doc: Document) {
 
   // Rebuild index button
   rebuildButton?.addEventListener("click", () => {
-    const confirmMsg = getString("pref-semantic-index-confirm-rebuild" as any) || "This will rebuild the entire index. Are you sure?";
+    const confirmMsg =
+      getString("pref-semantic-index-confirm-rebuild" as any) ||
+      "This will rebuild the entire index. Are you sure?";
     if (addon.data.prefs!.window.confirm(confirmMsg)) {
       startIndexing(true);
     }
@@ -1161,8 +1648,12 @@ function bindSemanticStatsSettings(doc: Document) {
       await semanticService.initialize();
 
       if (progressContainer) progressContainer.style.display = "block";
-      updateControlButtons('indexing');
-      showMessage(getString("pref-semantic-index-started" as any) || "Indexing started...", "info");
+      updateControlButtons("indexing");
+      showMessage(
+        getString("pref-semantic-index-started" as any) ||
+          "Indexing started...",
+        "info",
+      );
       startProgressUpdates();
 
       const result = await semanticService.retryFailedItems((progress: any) => {
@@ -1171,28 +1662,46 @@ function bindSemanticStatsSettings(doc: Document) {
 
       isIndexing = false;
       stopProgressUpdates();
-      updateControlButtons('idle');
+      updateControlButtons("idle");
 
-      if (result.status === 'busy') {
-        showMessage(getString("pref-semantic-index-busy" as any) || "An index build is already running, please wait for it to finish", "warning");
+      if (result.status === "busy") {
+        showMessage(
+          getString("pref-semantic-index-busy" as any) ||
+            "An index build is already running, please wait for it to finish",
+          "warning",
+        );
       } else if (result.total === 0) {
-        showMessage(getString("pref-semantic-index-no-failed-items" as any) || "No failed items to retry", "info");
+        showMessage(
+          getString("pref-semantic-index-no-failed-items" as any) ||
+            "No failed items to retry",
+          "info",
+        );
       } else if ((result.failedCount || 0) > 0) {
         showMessage(
           `${getString("pref-semantic-index-completed" as any) || "Indexing completed"} (${result.processed}/${result.total}, ${result.failedCount} ${getString("pref-semantic-index-failed-items" as any) || "items failed"})`,
-          "warning"
+          "warning",
         );
       } else {
-        showMessage(getString("pref-semantic-index-completed" as any) + ` (${result.processed}/${result.total})`, "success");
+        showMessage(
+          getString("pref-semantic-index-completed" as any) +
+            ` (${result.processed}/${result.total})`,
+          "success",
+        );
       }
 
       loadSemanticStats();
     } catch (error) {
       isIndexing = false;
       stopProgressUpdates();
-      updateControlButtons('idle');
-      showMessage(getString("pref-semantic-index-error" as any) + `: ${error}`, "error");
-      ztoolkit.log(`[PreferenceScript] Retry failed items failed: ${error}`, "error");
+      updateControlButtons("idle");
+      showMessage(
+        getString("pref-semantic-index-error" as any) + `: ${error}`,
+        "error",
+      );
+      ztoolkit.log(
+        `[PreferenceScript] Retry failed items failed: ${error}`,
+        "error",
+      );
     }
   });
 
@@ -1210,24 +1719,37 @@ function bindSemanticStatsSettings(doc: Document) {
 
       // Check current status before pausing
       const beforeProgress = semanticService.getIndexProgress();
-      ztoolkit.log(`[PreferenceScript] Before pause: status=${beforeProgress.status}`);
+      ztoolkit.log(
+        `[PreferenceScript] Before pause: status=${beforeProgress.status}`,
+      );
 
       semanticService.pauseIndex();
 
       // Verify pause took effect
       const afterProgress = semanticService.getIndexProgress();
-      ztoolkit.log(`[PreferenceScript] After pause: status=${afterProgress.status}`);
+      ztoolkit.log(
+        `[PreferenceScript] After pause: status=${afterProgress.status}`,
+      );
 
-      if (afterProgress.status === 'paused') {
-        updateControlButtons('paused');
-        showMessage(getString("pref-semantic-index-paused" as any) || "Indexing paused", "warning");
+      if (afterProgress.status === "paused") {
+        updateControlButtons("paused");
+        showMessage(
+          getString("pref-semantic-index-paused" as any) || "Indexing paused",
+          "warning",
+        );
       } else {
-        ztoolkit.log(`[PreferenceScript] Pause did not take effect, status is still: ${afterProgress.status}`, "warn");
+        ztoolkit.log(
+          `[PreferenceScript] Pause did not take effect, status is still: ${afterProgress.status}`,
+          "warn",
+        );
         // Restart progress updates if pause failed
         startProgressUpdates();
       }
     } catch (error) {
-      ztoolkit.log(`[PreferenceScript] Failed to pause indexing: ${error}`, "warn");
+      ztoolkit.log(
+        `[PreferenceScript] Failed to pause indexing: ${error}`,
+        "warn",
+      );
     }
   });
 
@@ -1251,15 +1773,24 @@ function bindSemanticStatsSettings(doc: Document) {
 
       // Check if this is a resume after restart or error (no active build process)
       // We detect this by checking if isIndexing is false but status is paused/error
-      if (!isIndexing && (progress.status === 'paused' || progress.status === 'error')) {
+      if (
+        !isIndexing &&
+        (progress.status === "paused" || progress.status === "error")
+      ) {
         // Resume after restart/error - need to start a new build process
-        ztoolkit.log(`[PreferenceScript] Resuming index after ${progress.status} - starting new build process`);
+        ztoolkit.log(
+          `[PreferenceScript] Resuming index after ${progress.status} - starting new build process`,
+        );
         isIndexing = true;
 
         // Reset the paused/error state
         semanticService.resumeIndex();
-        updateControlButtons('indexing');
-        showMessage(getString("pref-semantic-index-started" as any) || "Indexing resumed...", "info");
+        updateControlButtons("indexing");
+        showMessage(
+          getString("pref-semantic-index-started" as any) ||
+            "Indexing resumed...",
+          "info",
+        );
 
         // Show progress UI
         if (progressContainer) progressContainer.style.display = "block";
@@ -1269,52 +1800,65 @@ function bindSemanticStatsSettings(doc: Document) {
 
         // Start a new build (not rebuild) to continue from where we left off
         const resumeResult = await semanticService.buildIndex({
-          rebuild: false,  // Don't rebuild, just continue with unindexed items
+          rebuild: false, // Don't rebuild, just continue with unindexed items
           onProgress: (p: any) => {
             updateProgress(p);
-            if (p.status === 'completed' || p.status === 'aborted') {
+            if (p.status === "completed" || p.status === "aborted") {
               stopProgressUpdates();
-              updateControlButtons('idle');
+              updateControlButtons("idle");
               isIndexing = false;
               loadSemanticStats();
 
-              if (p.status === 'completed') {
+              if (p.status === "completed") {
                 // Check if there are any failed items
                 const failedItems = semanticService.getFailedItems();
                 if (failedItems.length > 0) {
                   showMessage(
                     `${getString("pref-semantic-index-completed" as any) || "Indexing completed"} (${failedItems.length} ${getString("pref-semantic-index-failed-items" as any) || "items failed"})`,
-                    "warning"
+                    "warning",
                   );
                 } else {
-                  showMessage(getString("pref-semantic-index-completed" as any) || "Indexing completed!", "success");
+                  showMessage(
+                    getString("pref-semantic-index-completed" as any) ||
+                      "Indexing completed!",
+                    "success",
+                  );
                 }
               }
             }
             // Note: error state is handled by the error callback, not here
-          }
+          },
         });
-        if (resumeResult.status === 'busy') {
+        if (resumeResult.status === "busy") {
           // The original build promise (from before the pane was reopened) is
           // still alive and was unparked by resumeIndex() above; our duplicate
           // buildIndex call was rejected by the guard, so its onProgress will
           // never fire. Let the polling interval drive the UI instead of
           // leaving isIndexing stuck true forever.
-          ztoolkit.log('[PreferenceScript] Resume unparked an existing build; relying on progress polling');
+          ztoolkit.log(
+            "[PreferenceScript] Resume unparked an existing build; relying on progress polling",
+          );
           isIndexing = false;
         }
       } else {
         // Normal resume during active session
         semanticService.resumeIndex();
-        updateControlButtons('indexing');
-        showMessage(getString("pref-semantic-index-started" as any) || "Indexing resumed...", "info");
+        updateControlButtons("indexing");
+        showMessage(
+          getString("pref-semantic-index-started" as any) ||
+            "Indexing resumed...",
+          "info",
+        );
         // Restart progress updates (they were stopped when pausing)
         startProgressUpdates();
       }
     } catch (error) {
-      ztoolkit.log(`[PreferenceScript] Failed to resume indexing: ${error}`, "warn");
+      ztoolkit.log(
+        `[PreferenceScript] Failed to resume indexing: ${error}`,
+        "warn",
+      );
       isIndexing = false;
-      updateControlButtons('idle');
+      updateControlButtons("idle");
     }
   });
 
@@ -1324,18 +1868,26 @@ function bindSemanticStatsSettings(doc: Document) {
       const { getSemanticSearchService } = require("./semantic");
       const semanticService = getSemanticSearchService();
       semanticService.abortIndex();
-      updateControlButtons('idle');
-      showMessage(getString("pref-semantic-index-aborted" as any) || "Indexing aborted", "warning");
+      updateControlButtons("idle");
+      showMessage(
+        getString("pref-semantic-index-aborted" as any) || "Indexing aborted",
+        "warning",
+      );
       stopProgressUpdates();
       isIndexing = false;
     } catch (error) {
-      ztoolkit.log(`[PreferenceScript] Failed to abort indexing: ${error}`, "warn");
+      ztoolkit.log(
+        `[PreferenceScript] Failed to abort indexing: ${error}`,
+        "warn",
+      );
     }
   });
 
   // Clear index button
   clearButton?.addEventListener("click", async () => {
-    const confirmMsg = getString("pref-semantic-index-confirm-clear" as any) || "This will clear all index data (content cache will be preserved). Are you sure?";
+    const confirmMsg =
+      getString("pref-semantic-index-confirm-clear" as any) ||
+      "This will clear all index data (content cache will be preserved). Are you sure?";
     if (!addon.data.prefs!.window.confirm(confirmMsg)) {
       return;
     }
@@ -1346,14 +1898,23 @@ function bindSemanticStatsSettings(doc: Document) {
       await vectorStore.initialize();
       await vectorStore.clear();
 
-      showMessage(getString("pref-semantic-index-cleared" as any) || "Index cleared", "success");
+      showMessage(
+        getString("pref-semantic-index-cleared" as any) || "Index cleared",
+        "success",
+      );
       ztoolkit.log("[PreferenceScript] Index cleared successfully");
 
       // Reload stats to show updated state
       loadSemanticStats();
     } catch (error) {
-      showMessage(getString("pref-semantic-index-error" as any) + `: ${error}`, "error");
-      ztoolkit.log(`[PreferenceScript] Failed to clear index: ${error}`, "error");
+      showMessage(
+        getString("pref-semantic-index-error" as any) + `: ${error}`,
+        "error",
+      );
+      ztoolkit.log(
+        `[PreferenceScript] Failed to clear index: ${error}`,
+        "error",
+      );
     }
   });
 
@@ -1370,8 +1931,12 @@ function bindSemanticStatsSettings(doc: Document) {
 
       // Show progress UI
       if (progressContainer) progressContainer.style.display = "block";
-      updateControlButtons('indexing');
-      showMessage(getString("pref-semantic-index-started" as any) || "Indexing started...", "info");
+      updateControlButtons("indexing");
+      showMessage(
+        getString("pref-semantic-index-started" as any) ||
+          "Indexing started...",
+        "info",
+      );
 
       // Start progress updates
       startProgressUpdates();
@@ -1381,49 +1946,72 @@ function bindSemanticStatsSettings(doc: Document) {
         rebuild,
         onProgress: (progress: any) => {
           updateProgress(progress);
-        }
+        },
       });
 
       // Indexing completed
       isIndexing = false;
       stopProgressUpdates();
-      updateControlButtons('idle');
+      updateControlButtons("idle");
 
-      if (result.status === 'busy') {
-        showMessage(getString("pref-semantic-index-busy" as any) || "An index build is already running, please wait for it to finish", "warning");
-      } else if (result.status === 'completed') {
+      if (result.status === "busy") {
+        showMessage(
+          getString("pref-semantic-index-busy" as any) ||
+            "An index build is already running, please wait for it to finish",
+          "warning",
+        );
+      } else if (result.status === "completed") {
         if (result.total === 0) {
-          showMessage(getString("pref-semantic-index-no-items" as any) || "No items need indexing", "info");
+          showMessage(
+            getString("pref-semantic-index-no-items" as any) ||
+              "No items need indexing",
+            "info",
+          );
         } else {
           // Check for failed items
           const failedItems = semanticService.getFailedItems();
           if (failedItems.length > 0) {
             showMessage(
               `${getString("pref-semantic-index-completed" as any) || "Indexing completed"} (${result.processed}/${result.total}, ${failedItems.length} ${getString("pref-semantic-index-failed-items" as any) || "items failed"})`,
-              "warning"
+              "warning",
             );
           } else {
-            showMessage(getString("pref-semantic-index-completed" as any) + ` (${result.processed}/${result.total})`, "success");
+            showMessage(
+              getString("pref-semantic-index-completed" as any) +
+                ` (${result.processed}/${result.total})`,
+              "success",
+            );
           }
         }
-      } else if (result.status === 'aborted') {
-        showMessage(getString("pref-semantic-index-aborted" as any) || "Indexing aborted", "warning");
-      } else if (result.status === 'error') {
+      } else if (result.status === "aborted") {
+        showMessage(
+          getString("pref-semantic-index-aborted" as any) || "Indexing aborted",
+          "warning",
+        );
+      } else if (result.status === "error") {
         // Error is already shown by the error callback, but show additional info if available
         if (result.error && !lastErrorInfo) {
-          showMessage(getString("pref-semantic-index-error" as any) + `: ${result.error}`, "error");
+          showMessage(
+            getString("pref-semantic-index-error" as any) + `: ${result.error}`,
+            "error",
+          );
         }
       }
 
       // Reload stats
       loadSemanticStats();
-
     } catch (error) {
       isIndexing = false;
       stopProgressUpdates();
-      updateControlButtons('idle');
-      showMessage(getString("pref-semantic-index-error" as any) + `: ${error}`, "error");
-      ztoolkit.log(`[PreferenceScript] Index building failed: ${error}`, "error");
+      updateControlButtons("idle");
+      showMessage(
+        getString("pref-semantic-index-error" as any) + `: ${error}`,
+        "error",
+      );
+      ztoolkit.log(
+        `[PreferenceScript] Index building failed: ${error}`,
+        "error",
+      );
     }
   }
 
@@ -1463,17 +2051,28 @@ function bindSemanticStatsSettings(doc: Document) {
     return `${hours}h ${remainingMinutes}m`;
   }
 
-  function updateControlButtons(status: 'idle' | 'indexing' | 'paused') {
-    if (buildButton) buildButton.style.display = status === 'idle' ? '' : 'none';
-    if (rebuildButton) rebuildButton.style.display = status === 'idle' ? '' : 'none';
-    if (retryFailedButton) retryFailedButton.style.display = status === 'idle' ? '' : 'none';
-    if (clearButton) clearButton.style.display = status === 'idle' ? '' : 'none';
-    if (pauseButton) pauseButton.style.display = status === 'indexing' ? '' : 'none';
-    if (resumeButton) resumeButton.style.display = status === 'paused' ? '' : 'none';
-    if (abortButton) abortButton.style.display = (status === 'indexing' || status === 'paused') ? '' : 'none';
+  function updateControlButtons(status: "idle" | "indexing" | "paused") {
+    if (buildButton)
+      buildButton.style.display = status === "idle" ? "" : "none";
+    if (rebuildButton)
+      rebuildButton.style.display = status === "idle" ? "" : "none";
+    if (retryFailedButton)
+      retryFailedButton.style.display = status === "idle" ? "" : "none";
+    if (clearButton)
+      clearButton.style.display = status === "idle" ? "" : "none";
+    if (pauseButton)
+      pauseButton.style.display = status === "indexing" ? "" : "none";
+    if (resumeButton)
+      resumeButton.style.display = status === "paused" ? "" : "none";
+    if (abortButton)
+      abortButton.style.display =
+        status === "indexing" || status === "paused" ? "" : "none";
   }
 
-  function showMessage(text: string, type: 'info' | 'success' | 'warning' | 'error') {
+  function showMessage(
+    text: string,
+    type: "info" | "success" | "warning" | "error",
+  ) {
     if (!messageEl) return;
 
     // Clear any pending timeout to prevent previous messages from hiding this one
@@ -1490,7 +2089,7 @@ function bindSemanticStatsSettings(doc: Document) {
       info: { bg: "var(--msg-info-bg)", text: "var(--msg-info-text)" },
       success: { bg: "var(--msg-success-bg)", text: "var(--msg-success-text)" },
       warning: { bg: "var(--msg-warning-bg)", text: "var(--msg-warning-text)" },
-      error: { bg: "var(--msg-error-bg)", text: "var(--msg-error-text)" }
+      error: { bg: "var(--msg-error-bg)", text: "var(--msg-error-text)" },
     };
 
     const color = colors[type] || colors.info;
@@ -1499,7 +2098,7 @@ function bindSemanticStatsSettings(doc: Document) {
 
     // Auto-hide after 5 seconds for non-error messages
     // Error messages persist until manually cleared or another message is shown
-    if (type !== 'error') {
+    if (type !== "error") {
       messageTimeout = setTimeout(() => {
         if (messageEl) messageEl.style.display = "none";
         messageTimeout = null;
@@ -1509,11 +2108,15 @@ function bindSemanticStatsSettings(doc: Document) {
 
   function startProgressUpdates() {
     if (progressUpdateInterval) {
-      ztoolkit.log(`[PreferenceScript] startProgressUpdates: interval already exists, skipping`);
+      ztoolkit.log(
+        `[PreferenceScript] startProgressUpdates: interval already exists, skipping`,
+      );
       return;
     }
 
-    ztoolkit.log(`[PreferenceScript] startProgressUpdates: starting progress update interval`);
+    ztoolkit.log(
+      `[PreferenceScript] startProgressUpdates: starting progress update interval`,
+    );
 
     progressUpdateInterval = setInterval(() => {
       try {
@@ -1531,26 +2134,33 @@ function bindSemanticStatsSettings(doc: Document) {
 
         // Update control buttons based on status
         if (progressUpdateInterval) {
-          if (progress.status === 'paused' || progress.status === 'error') {
-            updateControlButtons('paused');
-          } else if (progress.status === 'indexing') {
-            updateControlButtons('indexing');
+          if (progress.status === "paused" || progress.status === "error") {
+            updateControlButtons("paused");
+          } else if (progress.status === "indexing") {
+            updateControlButtons("indexing");
           }
         }
 
         // Log progress periodically (every 5 seconds) for debugging
         if (progress.processed % 5 === 0 && progress.processed > 0) {
-          ztoolkit.log(`[PreferenceScript] Progress update: ${progress.processed}/${progress.total} (${progress.status})`);
+          ztoolkit.log(
+            `[PreferenceScript] Progress update: ${progress.processed}/${progress.total} (${progress.status})`,
+          );
         }
       } catch (error) {
-        ztoolkit.log(`[PreferenceScript] Progress update error: ${error}`, 'warn');
+        ztoolkit.log(
+          `[PreferenceScript] Progress update error: ${error}`,
+          "warn",
+        );
       }
-    }, 500);  // Update every 500ms for smoother progress
+    }, 500); // Update every 500ms for smoother progress
   }
 
   function stopProgressUpdates() {
     if (progressUpdateInterval) {
-      ztoolkit.log(`[PreferenceScript] stopProgressUpdates: stopping progress update interval`);
+      ztoolkit.log(
+        `[PreferenceScript] stopProgressUpdates: stopping progress update interval`,
+      );
       clearInterval(progressUpdateInterval);
       progressUpdateInterval = null;
     }
@@ -1584,51 +2194,81 @@ function bindSemanticStatsSettings(doc: Document) {
       };
 
       // Update UI
-      if (totalItemsEl) totalItemsEl.textContent = String(stats.indexStats.totalItems);
-      if (totalVectorsEl) totalVectorsEl.textContent = String(stats.indexStats.totalVectors);
-      if (zhVectorsEl) zhVectorsEl.textContent = String(stats.indexStats.zhVectors);
-      if (enVectorsEl) enVectorsEl.textContent = String(stats.indexStats.enVectors);
-      if (cachedItemsEl) cachedItemsEl.textContent = String(stats.indexStats.cachedContentItems || 0);
-      if (cacheSizeEl) cacheSizeEl.textContent = formatSize(stats.indexStats.cachedContentSizeBytes || 0);
-      if (dbSizeEl) dbSizeEl.textContent = stats.indexStats.dbSizeBytes ? formatSize(stats.indexStats.dbSizeBytes) : '-';
+      if (totalItemsEl)
+        totalItemsEl.textContent = String(stats.indexStats.totalItems);
+      if (totalVectorsEl)
+        totalVectorsEl.textContent = String(stats.indexStats.totalVectors);
+      if (zhVectorsEl)
+        zhVectorsEl.textContent = String(stats.indexStats.zhVectors);
+      if (enVectorsEl)
+        enVectorsEl.textContent = String(stats.indexStats.enVectors);
+      if (cachedItemsEl)
+        cachedItemsEl.textContent = String(
+          stats.indexStats.cachedContentItems || 0,
+        );
+      if (cacheSizeEl)
+        cacheSizeEl.textContent = formatSize(
+          stats.indexStats.cachedContentSizeBytes || 0,
+        );
+      if (dbSizeEl)
+        dbSizeEl.textContent = stats.indexStats.dbSizeBytes
+          ? formatSize(stats.indexStats.dbSizeBytes)
+          : "-";
       if (dimensionsEl) {
         if (stats.indexStats.storedDimensions) {
           // Get configured dimensions from prefs to show comparison
-          const configuredDims = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.dimensions", true);
-          const configuredDimsNum = configuredDims ? parseInt(String(configuredDims), 10) : null;
-          if (configuredDimsNum && configuredDimsNum !== stats.indexStats.storedDimensions) {
+          const configuredDims = Zotero.Prefs.get(
+            "extensions.zotero.zotero-mcp-plugin.embedding.dimensions",
+            true,
+          );
+          const configuredDimsNum = configuredDims
+            ? parseInt(String(configuredDims), 10)
+            : null;
+          if (
+            configuredDimsNum &&
+            configuredDimsNum !== stats.indexStats.storedDimensions
+          ) {
             dimensionsEl.textContent = `${stats.indexStats.storedDimensions} (${getString("pref-semantic-stats-dimensions-mismatch" as any) || "mismatch"}: ${configuredDims})`;
             dimensionsEl.style.color = "var(--color-error)";
           } else {
-            dimensionsEl.textContent = String(stats.indexStats.storedDimensions);
+            dimensionsEl.textContent = String(
+              stats.indexStats.storedDimensions,
+            );
             dimensionsEl.style.color = "var(--color-default)";
           }
         } else {
-          dimensionsEl.textContent = '-';
+          dimensionsEl.textContent = "-";
         }
       }
       if (int8StatusEl) {
         if (stats.indexStats.int8MigrationStatus) {
-          const { migrated, total, percent } = stats.indexStats.int8MigrationStatus;
+          const { migrated, total, percent } =
+            stats.indexStats.int8MigrationStatus;
           int8StatusEl.textContent = `${migrated}/${total} (${percent}%)`;
-          int8StatusEl.style.color = percent === 100 ? "var(--color-ok)" : "var(--color-warn)";
+          int8StatusEl.style.color =
+            percent === 100 ? "var(--color-ok)" : "var(--color-warn)";
         } else {
-          int8StatusEl.textContent = '-';
+          int8StatusEl.textContent = "-";
         }
       }
-      if (statusEl) statusEl.textContent = getStatusText(stats.indexProgress.status);
+      if (statusEl)
+        statusEl.textContent = getStatusText(stats.indexProgress.status);
 
       // Update progress display if indexing is in progress or has error
-      if (stats.indexProgress.status === 'indexing' || stats.indexProgress.status === 'paused' || stats.indexProgress.status === 'error') {
+      if (
+        stats.indexProgress.status === "indexing" ||
+        stats.indexProgress.status === "paused" ||
+        stats.indexProgress.status === "error"
+      ) {
         if (progressContainer) progressContainer.style.display = "block";
         updateProgress(stats.indexProgress);
 
-        if (stats.indexProgress.status === 'error') {
+        if (stats.indexProgress.status === "error") {
           // Show error state - display error message and allow resume
-          updateControlButtons('paused');  // Show resume button for retry
+          updateControlButtons("paused"); // Show resume button for retry
           if (statusEl) {
             // Include error message in status if available
-            const errorStatus = getStatusText('error');
+            const errorStatus = getStatusText("error");
             if (stats.indexProgress.error) {
               statusEl.textContent = `${errorStatus}: ${stats.indexProgress.error}`;
             } else {
@@ -1638,23 +2278,26 @@ function bindSemanticStatsSettings(doc: Document) {
           }
           // Also show error message in message area if available
           if (stats.indexProgress.error) {
-            const retryHint = stats.indexProgress.errorRetryable !== false
-              ? ` (${getString("pref-semantic-index-error-retry-hint" as any) || "Click Resume to retry"})`
-              : '';
+            const retryHint =
+              stats.indexProgress.errorRetryable !== false
+                ? ` (${getString("pref-semantic-index-error-retry-hint" as any) || "Click Resume to retry"})`
+                : "";
             showMessage(stats.indexProgress.error + retryHint, "error");
           }
         } else {
-          updateControlButtons(stats.indexProgress.status as 'indexing' | 'paused');
+          updateControlButtons(
+            stats.indexProgress.status as "indexing" | "paused",
+          );
           if (statusEl) statusEl.style.color = "";
         }
 
-        isIndexing = stats.indexProgress.status === 'indexing';
+        isIndexing = stats.indexProgress.status === "indexing";
         if (isIndexing && !progressUpdateInterval) {
           startProgressUpdates();
         }
       } else {
         if (progressContainer) progressContainer.style.display = "none";
-        updateControlButtons('idle');
+        updateControlButtons("idle");
         if (statusEl) statusEl.style.color = "";
         // The build is over (idle/completed/aborted): release the local flag
         // and stop polling so the buttons cannot get stuck disabled when the
@@ -1670,37 +2313,53 @@ function bindSemanticStatsSettings(doc: Document) {
       contentEl.style.display = "block";
 
       // Update detail stats summary in collapsible header
-      const detailSummaryEl = doc?.querySelector('#detail-stats-summary') as HTMLElement;
+      const detailSummaryEl = doc?.querySelector(
+        "#detail-stats-summary",
+      ) as HTMLElement;
       if (detailSummaryEl) {
         try {
-          const { getEmbeddingService } = require("./semantic/embeddingService");
+          const {
+            getEmbeddingService,
+          } = require("./semantic/embeddingService");
           const embeddingService = getEmbeddingService();
           const usageStats = embeddingService.getUsageStats();
-          const tokenStr = usageStats.totalTokens > 1000
-            ? `${Math.round(usageStats.totalTokens / 1000)}K`
-            : String(usageStats.totalTokens);
+          const tokenStr =
+            usageStats.totalTokens > 1000
+              ? `${Math.round(usageStats.totalTokens / 1000)}K`
+              : String(usageStats.totalTokens);
           detailSummaryEl.textContent = `${tokenStr} tokens · $${usageStats.estimatedCostUsd.toFixed(2)}`;
         } catch {
-          detailSummaryEl.textContent = '';
+          detailSummaryEl.textContent = "";
         }
       }
 
       if (!silent) {
-        ztoolkit.log(`[PreferenceScript] Loaded semantic stats: ${stats.indexStats.totalItems} items, ${stats.indexStats.totalVectors} vectors`);
+        ztoolkit.log(
+          `[PreferenceScript] Loaded semantic stats: ${stats.indexStats.totalItems} items, ${stats.indexStats.totalVectors} vectors`,
+        );
       }
-
     } catch (error) {
-      ztoolkit.log(`[PreferenceScript] Failed to load semantic stats: ${error}`, "warn");
+      ztoolkit.log(
+        `[PreferenceScript] Failed to load semantic stats: ${error}`,
+        "warn",
+      );
 
       // Check if the error is database corruption
       const errorStr = String(error);
-      const isCorruption = errorStr.includes('malformed') || errorStr.includes('corrupt') || errorStr.includes('disk image');
+      const isCorruption =
+        errorStr.includes("malformed") ||
+        errorStr.includes("corrupt") ||
+        errorStr.includes("disk image");
 
       // Show appropriate error message
       if (isCorruption) {
-        loadingEl.textContent = getString("pref-semantic-stats-db-corrupted" as any) || "Index database is corrupted. Please restart Zotero to auto-repair.";
+        loadingEl.textContent =
+          getString("pref-semantic-stats-db-corrupted" as any) ||
+          "Index database is corrupted. Please restart Zotero to auto-repair.";
       } else {
-        loadingEl.textContent = getString("pref-semantic-stats-not-initialized" as any) || "Semantic search service not initialized";
+        loadingEl.textContent =
+          getString("pref-semantic-stats-not-initialized" as any) ||
+          "Semantic search service not initialized";
       }
       loadingEl.style.display = "block";
       contentEl.style.display = "none";
@@ -1709,12 +2368,14 @@ function bindSemanticStatsSettings(doc: Document) {
 
   function getStatusText(status: string): string {
     const statusMap: Record<string, string> = {
-      'idle': getString("pref-semantic-stats-status-idle" as any) || 'Idle',
-      'indexing': getString("pref-semantic-stats-status-indexing" as any) || 'Indexing',
-      'paused': getString("pref-semantic-stats-status-paused" as any) || 'Paused',
-      'completed': getString("pref-semantic-stats-status-completed" as any) || 'Completed',
-      'error': getString("pref-semantic-stats-status-error" as any) || 'Error',
-      'aborted': 'Aborted'
+      idle: getString("pref-semantic-stats-status-idle" as any) || "Idle",
+      indexing:
+        getString("pref-semantic-stats-status-indexing" as any) || "Indexing",
+      paused: getString("pref-semantic-stats-status-paused" as any) || "Paused",
+      completed:
+        getString("pref-semantic-stats-status-completed" as any) || "Completed",
+      error: getString("pref-semantic-stats-status-error" as any) || "Error",
+      aborted: "Aborted",
     };
     return statusMap[status] || status;
   }
@@ -1732,18 +2393,37 @@ function bindSemanticStatsSettings(doc: Document) {
 
       // Register error callback
       semanticService.setOnIndexError((error: any) => {
-        ztoolkit.log(`[PreferenceScript] Received indexing error: ${error.type} - ${error.message}`);
+        ztoolkit.log(
+          `[PreferenceScript] Received indexing error: ${error.type} - ${error.message}`,
+        );
 
         // Get localized error message based on error type, including original error details
-        const getLocalizedErrorMessage = (errorType: string, originalMessage: string): string => {
+        const getLocalizedErrorMessage = (
+          errorType: string,
+          originalMessage: string,
+        ): string => {
           const errorTypeMap: Record<string, string> = {
-            'network': getString("pref-semantic-index-error-network" as any) || 'Network connection failed, please check your network and click Resume',
-            'rate_limit': getString("pref-semantic-index-error-rate-limit" as any) || 'API rate limit exceeded, please try again later',
-            'auth': getString("pref-semantic-index-error-auth" as any) || 'API authentication failed, please check your API key',
-            'invalid_request': getString("pref-semantic-index-error-invalid-request" as any) || 'Invalid API request, please check configuration',
-            'server': getString("pref-semantic-index-error-server" as any) || 'API server error, please try again later',
-            'config': getString("pref-semantic-index-error-config" as any) || 'Configuration error, please check API settings',
-            'unknown': getString("pref-semantic-index-error-unknown" as any) || 'Unknown error'
+            network:
+              getString("pref-semantic-index-error-network" as any) ||
+              "Network connection failed, please check your network and click Resume",
+            rate_limit:
+              getString("pref-semantic-index-error-rate-limit" as any) ||
+              "API rate limit exceeded, please try again later",
+            auth:
+              getString("pref-semantic-index-error-auth" as any) ||
+              "API authentication failed, please check your API key",
+            invalid_request:
+              getString("pref-semantic-index-error-invalid-request" as any) ||
+              "Invalid API request, please check configuration",
+            server:
+              getString("pref-semantic-index-error-server" as any) ||
+              "API server error, please try again later",
+            config:
+              getString("pref-semantic-index-error-config" as any) ||
+              "Configuration error, please check API settings",
+            unknown:
+              getString("pref-semantic-index-error-unknown" as any) ||
+              "Unknown error",
           };
           const localizedMsg = errorTypeMap[errorType];
           // For known error types, append original message if it provides additional details
@@ -1754,32 +2434,35 @@ function bindSemanticStatsSettings(doc: Document) {
               ? `${localizedMsg}: ${originalMessage}`
               : localizedMsg;
           }
-          return originalMessage || 'Unknown error';
+          return originalMessage || "Unknown error";
         };
 
         // Store error info for display and potential retry
         lastErrorInfo = {
-          message: getLocalizedErrorMessage(error.type || 'unknown', error.message),
-          type: error.type || 'unknown',
-          retryable: error.retryable !== false
+          message: getLocalizedErrorMessage(
+            error.type || "unknown",
+            error.message,
+          ),
+          type: error.type || "unknown",
+          retryable: error.retryable !== false,
         };
 
         // Stop progress updates
         stopProgressUpdates();
 
         // Update UI to show error state
-        updateControlButtons('paused');
+        updateControlButtons("paused");
 
         // Show error message with retry hint
         const errorMsg = lastErrorInfo.message;
         const retryHint = lastErrorInfo.retryable
           ? ` (${getString("pref-semantic-index-error-retry-hint" as any) || "Click Resume to retry"})`
-          : '';
+          : "";
         showMessage(errorMsg + retryHint, "error");
 
         // Update status display
         if (statusEl) {
-          statusEl.textContent = getStatusText('error');
+          statusEl.textContent = getStatusText("error");
           statusEl.style.color = "var(--msg-error-text)";
         }
 
@@ -1788,9 +2471,291 @@ function bindSemanticStatsSettings(doc: Document) {
         // resumeIndex() path instead of spawning a second buildIndex run.
       });
 
-      ztoolkit.log("[PreferenceScript] Registered error callback for semantic service");
+      ztoolkit.log(
+        "[PreferenceScript] Registered error callback for semantic service",
+      );
     } catch (error) {
-      ztoolkit.log(`[PreferenceScript] Failed to register error callback: ${error}`, "warn");
+      ztoolkit.log(
+        `[PreferenceScript] Failed to register error callback: ${error}`,
+        "warn",
+      );
     }
   }
+
+  // Bind Doc2X bilingual noise filter preferences
+  bindHtmlCheckbox(
+    doc,
+    "#zotero-prefpane-zotero-mcp-plugin-semantic-bilingualFilter",
+    "extensions.zotero.zotero-mcp-plugin.semantic.bilingualFilter",
+  );
+  bindHtmlInput(
+    doc,
+    "#zotero-prefpane-zotero-mcp-plugin-semantic-blacklistPatterns",
+    "extensions.zotero.zotero-mcp-plugin.semantic.blacklistPatterns",
+  );
+
+  // Setup Zero-Lag Index Status Manager Table with Pagination
+  setupZeroLagIndexManager(doc);
+}
+
+/**
+ * Setup Zero-Lag Index Manager Table with Pagination & Lazy Collection Path Resolution
+ */
+function setupZeroLagIndexManager(doc: Document) {
+  if (!doc) return;
+
+  const tbody = doc.querySelector("#zmp-idx-tbody") as HTMLElement;
+  const searchInput = doc.querySelector("#zmp-idx-search") as HTMLInputElement;
+  const filterSelect = doc.querySelector(
+    "#zmp-idx-filter-status",
+  ) as HTMLSelectElement;
+  const btnRefresh = doc.querySelector(
+    "#zmp-idx-btn-refresh",
+  ) as HTMLButtonElement;
+  const btnReindexAll = doc.querySelector(
+    "#zmp-idx-btn-reindex-all",
+  ) as HTMLButtonElement;
+  const btnClearAll = doc.querySelector(
+    "#zmp-idx-btn-clear-all",
+  ) as HTMLButtonElement;
+  const paginationInfo = doc.querySelector(
+    "#zmp-idx-pagination-info",
+  ) as HTMLElement;
+  const btnPrev = doc.querySelector("#zmp-idx-btn-prev") as HTMLButtonElement;
+  const btnNext = doc.querySelector("#zmp-idx-btn-next") as HTMLButtonElement;
+
+  if (!tbody) return;
+
+  // In-memory lightweight status map (itemKey -> chunkCount)
+  const statusMap = new Map<string, number>();
+  let itemListCache: Array<{
+    key: string;
+    title: string;
+    isAttachment: boolean;
+  }> = [];
+
+  let currentPage = 1;
+  const pageSize = 12;
+
+  // Helper to get Collection Path string asynchronously
+  const collectionPathCache = new Map<string, string>();
+  function getCollectionPath(itemKey: string): string {
+    if (collectionPathCache.has(itemKey)) {
+      return collectionPathCache.get(itemKey)!;
+    }
+    try {
+      const item = Zotero.Items.getByLibraryAndKey(1, itemKey);
+      if (!item) return "-";
+      const collections = item.getCollections();
+      if (!collections || collections.length === 0) {
+        collectionPathCache.set(itemKey, "未分类");
+        return "未分类";
+      }
+      const col = Zotero.Collections.get(collections[0]);
+      if (!col) return "-";
+      let path = col.name;
+      let parentID = col.parentID;
+      while (parentID) {
+        const parent = Zotero.Collections.get(parentID);
+        if (!parent) break;
+        path = `${parent.name} / ${path}`;
+        parentID = parent.parentID;
+      }
+      collectionPathCache.set(itemKey, path);
+      return path;
+    } catch (e) {
+      return "-";
+    }
+  }
+
+  // Reload lightweight item list & vector status map
+  async function refreshData() {
+    try {
+      if (tbody)
+        tbody.innerHTML = `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-2);">正在读取索引数据...</td></tr>`;
+
+      // 1. Fetch vector status map (O(1) Memory lookup)
+      const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch
+        ?.vectorStore;
+      statusMap.clear();
+      if (vectorStore?.getAllItemVectorStatus) {
+        const vecStats = await vectorStore.getAllItemVectorStatus();
+        for (const s of vecStats) {
+          statusMap.set(s.itemKey, s.chunkCount);
+        }
+      }
+
+      // 2. Fetch lightweight Zotero PDF/Item list
+      const items = await Zotero.Items.getAll(1, true); // User library
+      itemListCache = [];
+
+      for (const item of items) {
+        if (item.isRegularItem() || item.isPDFAttachment()) {
+          itemListCache.push({
+            key: item.key,
+            title:
+              item.getDisplayTitle() || item.getField("title") || "未命名文献",
+            isAttachment: item.isAttachment(),
+          });
+        }
+      }
+
+      renderTable();
+    } catch (err) {
+      ztoolkit.log(`[IndexManager] Error refreshing data: ${err}`, "error");
+    }
+  }
+
+  // Render paginated view
+  function renderTable() {
+    const query = searchInput?.value?.toLowerCase().trim() || "";
+    const filter = filterSelect?.value || "all";
+
+    // Filter items
+    const filtered = itemListCache.filter((item) => {
+      const isIndexed =
+        statusMap.has(item.key) && (statusMap.get(item.key) || 0) > 0;
+      if (filter === "indexed" && !isIndexed) return false;
+      if (filter === "unindexed" && isIndexed) return false;
+
+      if (query) {
+        const titleMatch = item.title.toLowerCase().includes(query);
+        const colMatch = (collectionPathCache.get(item.key) || "")
+          .toLowerCase()
+          .includes(query);
+        if (!titleMatch && !colMatch) return false;
+      }
+      return true;
+    });
+
+    const totalCount = filtered.length;
+    const maxPage = Math.max(1, Math.ceil(totalCount / pageSize));
+    if (currentPage > maxPage) currentPage = maxPage;
+
+    const startIdx = (currentPage - 1) * pageSize;
+    const pageItems = filtered.slice(startIdx, startIdx + pageSize);
+
+    // Update pagination info
+    if (paginationInfo) {
+      paginationInfo.textContent = `第 ${currentPage} / ${maxPage} 页 (共 ${totalCount} 条记录)`;
+    }
+    if (btnPrev) btnPrev.disabled = currentPage <= 1;
+    if (btnNext) btnNext.disabled = currentPage >= maxPage;
+
+    if (pageItems.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-3);">无匹配记录</td></tr>`;
+      return;
+    }
+
+    // Render rows with lazy collection path
+    let html = "";
+    for (const item of pageItems) {
+      const chunkCount = statusMap.get(item.key) || 0;
+      const isIndexed = chunkCount > 0;
+      const colPath = getCollectionPath(item.key);
+
+      const statusBadge = isIndexed
+        ? `<span style="color:#10b981; font-weight:600;">✓ 已索引 (${chunkCount})</span>`
+        : `<span style="color:#9ca3af;">- 未索引</span>`;
+
+      const actionBtn = isIndexed
+        ? `<button class="zmp-b zmp-bd" data-act="clear" data-key="${item.key}" style="font-size:11px; padding:2px 6px;">清除</button>`
+        : `<button class="zmp-b zmp-bp" data-act="reindex" data-key="${item.key}" style="font-size:11px; padding:2px 6px;">索引</button>`;
+
+      html += `
+        <tr style="border-bottom:1px solid var(--border-light);">
+          <td style="padding:7px 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px;" title="${item.title}">${item.title}</td>
+          <td style="padding:7px 12px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;" title="${colPath}">${colPath}</td>
+          <td style="padding:7px 12px; text-align:center;">${statusBadge}</td>
+          <td style="padding:7px 12px; text-align:right;">${actionBtn}</td>
+        </tr>
+      `;
+    }
+    tbody.innerHTML = html;
+
+    // Bind item action buttons
+    tbody.querySelectorAll("button[data-act]").forEach((btn: Element) => {
+      btn.addEventListener("click", async (e: Event) => {
+        const target = e.currentTarget as HTMLElement;
+        const act = target.getAttribute("data-act");
+        const key = target.getAttribute("data-key");
+        if (!key) return;
+
+        const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch
+          ?.vectorStore;
+        const semanticService = (Zotero as any).ZoteroMCP?.semanticSearch;
+
+        if (act === "clear" && vectorStore) {
+          await vectorStore.deleteItemVectors(key);
+          statusMap.delete(key);
+          renderTable();
+        } else if (
+          act === "reindex" &&
+          semanticService &&
+          Zotero.Items.getByLibraryAndKey
+        ) {
+          target.textContent = "构建中...";
+          const item = Zotero.Items.getByLibraryAndKey(1, key);
+          if (item) {
+            await semanticService.indexItem(item);
+            await refreshData();
+          }
+        }
+      });
+    });
+  }
+
+  // Event Listeners
+  btnRefresh?.addEventListener("click", () => refreshData());
+  searchInput?.addEventListener("input", () => {
+    currentPage = 1;
+    renderTable();
+  });
+  filterSelect?.addEventListener("change", () => {
+    currentPage = 1;
+    renderTable();
+  });
+  btnPrev?.addEventListener("click", () => {
+    if (currentPage > 1) {
+      currentPage--;
+      renderTable();
+    }
+  });
+  btnNext?.addEventListener("click", () => {
+    currentPage++;
+    renderTable();
+  });
+
+  const win = doc.defaultView || (globalThis as any).window;
+
+  btnReindexAll?.addEventListener("click", async () => {
+    if (win && !win.confirm("确定要为所有未索引的文献批量构建向量索引吗？"))
+      return;
+    btnReindexAll.disabled = true;
+    btnReindexAll.textContent = "批量构建中...";
+    const semanticService = (Zotero as any).ZoteroMCP?.semanticSearch;
+    if (semanticService) {
+      for (const item of itemListCache) {
+        if (!statusMap.has(item.key)) {
+          const zItem = Zotero.Items.getByLibraryAndKey(1, item.key);
+          if (zItem) await semanticService.indexItem(zItem);
+        }
+      }
+    }
+    btnReindexAll.disabled = false;
+    btnReindexAll.textContent = "批量构建索引";
+    await refreshData();
+  });
+
+  btnClearAll?.addEventListener("click", async () => {
+    if (win && !win.confirm("警告：确定要清除所有已生成的向量索引吗？")) return;
+    const vectorStore = (Zotero as any).ZoteroMCP?.semanticSearch?.vectorStore;
+    if (vectorStore?.clearAllVectors) {
+      await vectorStore.clearAllVectors();
+      await refreshData();
+    }
+  });
+
+  // Initial load
+  refreshData();
 }

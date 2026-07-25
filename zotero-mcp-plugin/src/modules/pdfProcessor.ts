@@ -115,14 +115,11 @@ export class PDFProcessor {
         reject: (reason?: any) => {
           clearTimeout(timeoutId);
           reject(reason);
-        }
+        },
       };
 
       if (transfer) {
-        this._worker!.postMessage(
-          { id: promiseID, action, data },
-          transfer,
-        );
+        this._worker!.postMessage({ id: promiseID, action, data }, transfer);
       } else {
         this._worker!.postMessage({ id: promiseID, action, data });
       }
@@ -164,7 +161,10 @@ export class PDFProcessor {
 
       return response.text;
     } catch (error) {
-      const errMsg = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      const errMsg =
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error);
       this.ztoolkit.log(`[PDFProcessor] PDF文本提取失败: ${errMsg}`, "error");
       throw error;
     }
