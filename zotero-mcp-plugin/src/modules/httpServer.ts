@@ -1,79 +1,14 @@
 import { StreamableMCPServer } from "./streamableMCPServer";
+import { isModernMCPRequest } from "./mcpProtocol";
 import { serverPreferences } from "./serverPreferences";
 import { testMCPIntegration } from "./mcpTest";
+import {
+  readHttpRequest,
+  getByteLength,
+  type ByteReader,
+} from "./httpRequestReader";
 
 declare let ztoolkit: ZToolkit;
-
-/**
- * Helper to get UTF-8 byte length of a string
- */
-function getByteLength(str: string): number {
-  // Use TextEncoder for accurate UTF-8 byte count
-  try {
-    return new TextEncoder().encode(str).length;
-  } catch {
-    // Fallback for environments without TextEncoder
-    let bytes = 0;
-    for (let i = 0; i < str.length; i++) {
-      const charCode = str.charCodeAt(i);
-      if (charCode < 0x80) bytes += 1;
-      else if (charCode < 0x800) bytes += 2;
-      else if (charCode < 0xd800 || charCode >= 0xe000) bytes += 3;
-      else { // surrogate pair
-        i++;
-        bytes += 4;
-      }
-    }
-    return bytes;
-  }
-}
-
-/**
- * Slice string by UTF-8 byte length without splitting multibyte characters.
- */
-function sliceByUtf8Bytes(str: string, maxBytes: number): string {
-  if (maxBytes <= 0 || !str) {
-    return "";
-  }
-
-  let bytes = 0;
-  let end = 0;
-
-  for (let i = 0; i < str.length; i++) {
-    const code = str.charCodeAt(i);
-    let charBytes = 0;
-
-    if (code < 0x80) {
-      charBytes = 1;
-    } else if (code < 0x800) {
-      charBytes = 2;
-    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < str.length) {
-      const next = str.charCodeAt(i + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        charBytes = 4;
-      } else {
-        charBytes = 3;
-      }
-    } else {
-      charBytes = 3;
-    }
-
-    if (bytes + charBytes > maxBytes) {
-      break;
-    }
-
-    bytes += charBytes;
-    end = i + 1;
-
-    // Skip low surrogate after consuming a valid pair.
-    if (charBytes === 4) {
-      i++;
-      end = i + 1;
-    }
-  }
-
-  return str.substring(0, end);
-}
 
 /**
  * Write string to output stream with correct UTF-8 encoding
@@ -268,7 +203,7 @@ export class HttpServer {
   /**
    * Determine if connection should be kept alive based on request
    */
-  private shouldKeepAlive(requestText: string, path: string): boolean {
+  private shouldKeepAlive(headerText: string, path: string): boolean {
     // Current listener lifecycle handles one request per socket and closes
     // streams in finally. Do not advertise keep-alive for MCP endpoints.
     if (path === "/mcp" || path.startsWith("/mcp/")) {
@@ -276,7 +211,7 @@ export class HttpServer {
     }
     
     // Check for Connection header in request
-    const connectionHeader = requestText.match(/Connection:\s*([^\r\n]+)/i);
+    const connectionHeader = headerText.match(/Connection:\s*([^\r\n]+)/i);
     if (connectionHeader && connectionHeader[1].toLowerCase().includes('keep-alive')) {
       return true;
     }
@@ -313,8 +248,7 @@ export class HttpServer {
     onSocketAccepted: async (_socket: any, transport: any) => {
       let input: any = null;
       let output: any = null;
-      let sin: any = null;
-      const converterStream: any = null;
+      let binaryStream: any = null;
 
       // Track this transport for cleanup on shutdown
       this.activeTransports.add(transport);
@@ -325,159 +259,50 @@ export class HttpServer {
         input = transport.openInputStream(0, 0, 0);
         output = transport.openOutputStream(0, 0, 0);
 
-        // 使用转换输入流来正确处理UTF-8编码
-        const converterStream = Cc[
-          "@mozilla.org/intl/converter-input-stream;1"
-        ].createInstance(Ci.nsIConverterInputStream);
-        converterStream.init(input, "UTF-8", 0, 0);
-
-        sin = Cc["@mozilla.org/scriptableinputstream;1"].createInstance(
-          Ci.nsIScriptableInputStream,
+        // Read the request as raw bytes and decode once, at the end.
+        // A decoding stream must never be used here: HTTP framing is
+        // byte-denominated, and incremental decode + byte/char mixing
+        // corrupted every non-ASCII body (see httpRequestReader.ts).
+        binaryStream = Cc["@mozilla.org/binaryinputstream;1"].createInstance(
+          Ci.nsIBinaryInputStream,
         );
-        sin.init(input);
+        binaryStream.setInputStream(input);
 
-        // 改进请求读取逻辑 - 读取完整的HTTP请求（包括body）
-        let requestText = "";
-        let totalBytesRead = 0;
-        const maxRequestSize = 1024 * 1024; // 1MB max request size
-        let waitAttempts = 0;
-        const maxWaitAttempts = 50; // Increase wait attempts for larger requests
-        let headersComplete = false;
-        let contentLength = 0;
-        let bodyStartIndex = -1;
+        const reader: ByteReader = {
+          available: () => input.available(),
+          readBytes: (count: number) =>
+            Uint8Array.from(binaryStream.readByteArray(count)),
+        };
 
-        try {
-          // Step 1: Read headers until we find \r\n\r\n
-          while (totalBytesRead < maxRequestSize && !headersComplete) {
-            const bytesToRead = Math.min(4096, maxRequestSize - totalBytesRead);
-            const available = input.available();
+        // Read the full request as bytes; decode once when complete.
+        const read = await readHttpRequest(reader, {
+          maxRequestSize: 1024 * 1024,
+        });
 
-            // Attempt the read even when available === 0: the converter
-            // stream buffers up to 8KB drained from the socket per fill, and
-            // input.available() only reflects un-consumed raw socket bytes —
-            // gating reads on it strands buffered data and stalls the request
-            let chunk = "";
-            try {
-              const str: { value?: string } = {};
-              converterStream.readString(available > 0 ? Math.min(bytesToRead, available) : bytesToRead, str);
-              chunk = str.value || "";
-            } catch (converterError) {
-              // NS_BASE_STREAM_WOULD_BLOCK when both the converter buffer and
-              // the socket are empty; fall back to a raw read only when the
-              // socket reports data (decode failure on a live stream)
-              try {
-                chunk = available > 0 ? sin.read(Math.min(bytesToRead, available)) : "";
-              } catch {
-                chunk = "";
-              }
-            }
+        const headerText = read.headerText;
+        const contentLength = read.contentLength;
+        const totalBytesRead = read.totalBytesRead;
 
-            if (!chunk) {
-              if (available === 0) {
-                waitAttempts++;
-                if (waitAttempts > maxWaitAttempts) {
-                  ztoolkit.log(`[HttpServer] Timeout waiting for headers after ${waitAttempts} attempts, TotalBytes: ${totalBytesRead}`, "warn");
-                  break;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 10));
-                continue;
-              }
-              // Socket reported data but the read returned nothing - EOF
-              break;
-            }
-
-            waitAttempts = 0;
-            requestText += chunk;
-            totalBytesRead += chunk.length;
-
-            // Check if headers are complete
-            bodyStartIndex = requestText.indexOf("\r\n\r\n");
-            if (bodyStartIndex !== -1) {
-              headersComplete = true;
-              // Parse Content-Length from headers
-              const headersSection = requestText.substring(0, bodyStartIndex);
-              const contentLengthMatch = headersSection.match(/Content-Length:\s*(\d+)/i);
-              if (contentLengthMatch) {
-                contentLength = parseInt(contentLengthMatch[1], 10);
-              }
-            }
-          }
-
-          // Step 2: Read body based on Content-Length (for POST requests)
-          if (headersComplete && contentLength > 0) {
-            const bodyStart = bodyStartIndex + 4; // Skip \r\n\r\n
-            // Content-Length is byte-denominated: compare UTF-8 byte counts,
-            // not UTF-16 char counts, or multibyte (CJK) bodies never satisfy
-            // the comparison and stall here until the wait timeout
-            let bodyBytesRead = getByteLength(requestText.substring(bodyStart));
-
-            ztoolkit.log(`[HttpServer] Reading body: Content-Length=${contentLength}, current=${bodyBytesRead}, remaining=${contentLength - bodyBytesRead}`);
-
-            waitAttempts = 0; // Reset wait counter for body reading
-            while (bodyBytesRead < contentLength) {
-              const available = input.available();
-              const budget = Math.min(8192, contentLength - bodyBytesRead);
-
-              // Attempt the read even when available === 0: body bytes may be
-              // sitting in the converter's internal buffer, drained from the
-              // socket during the header read (see header loop note)
-              let chunk = "";
-              try {
-                const str: { value?: string } = {};
-                converterStream.readString(available > 0 ? Math.min(budget, available) : budget, str);
-                chunk = str.value || "";
-              } catch (converterError) {
-                try {
-                  chunk = available > 0 ? sin.read(Math.min(budget, available)) : "";
-                } catch {
-                  chunk = "";
-                }
-              }
-
-              if (!chunk) {
-                if (available === 0) {
-                  waitAttempts++;
-                  if (waitAttempts > maxWaitAttempts) {
-                    ztoolkit.log(`[HttpServer] Timeout waiting for body after ${waitAttempts} attempts`, "warn");
-                    break;
-                  }
-                  await new Promise((resolve) => setTimeout(resolve, 10));
-                  continue;
-                }
-                // Socket reported data but the read returned nothing - EOF
-                break;
-              }
-
-              waitAttempts = 0;
-              requestText += chunk;
-              const chunkBytes = getByteLength(chunk);
-              bodyBytesRead += chunkBytes;
-              totalBytesRead += chunkBytes;
-            }
-          }
-        } catch (readError) {
+        if (!read.complete) {
           ztoolkit.log(
-            `[HttpServer] Error reading request: ${readError}, BytesRead: ${totalBytesRead}, InputStream available: ${input?.available ? input.available() : 'N/A'}`,
-            "error",
-          );
-          requestText = requestText || "INVALID_REQUEST";
-        }
-
-        ztoolkit.log(`[HttpServer] Total bytes read: ${totalBytesRead}, request text length: ${requestText.length}`);
-
-        try {
-          if (converterStream) converterStream.close();
-        } catch (e) {
-          ztoolkit.log(
-            `[HttpServer] Error closing converter stream: ${e}`,
-            "error",
+            `[HttpServer] Incomplete request (${read.incompleteReason}): BytesRead=${totalBytesRead}, Content-Length=${contentLength}`,
+            "warn",
           );
         }
 
-        if (sin) sin.close();
+        if (read.trailingBytes > 0) {
+          ztoolkit.log(
+            `[HttpServer] Read ${read.trailingBytes} byte(s) beyond this request body; ignoring (connection is not reused)`,
+            "warn",
+          );
+        }
+
+        ztoolkit.log(
+          `[HttpServer] Total bytes read: ${totalBytesRead}, header bytes: ${getByteLength(headerText)}, body bytes: ${contentLength}`,
+        );
 
         // Handle empty connections (likely health checks or probes)
-        if (totalBytesRead === 0 && requestText.length === 0) {
+        if (totalBytesRead === 0 && headerText.length === 0) {
           ztoolkit.log(
             `[HttpServer] Empty connection detected - likely health check/probe. Closing gracefully.`,
             "info",
@@ -485,15 +310,47 @@ export class HttpServer {
           return; // Gracefully close without sending error response
         }
 
-        const requestLine = requestText.split("\r\n")[0];
+        // A body that never reached Content-Length must not be handed to the
+        // parser: that yields a misleading "Parse error" for what is actually
+        // a truncated read. Fail loudly instead.
+        if (!read.complete && read.incompleteReason === "body-truncated") {
+          const bodyBytes = read.bodyBytesRead;
+          ztoolkit.log(
+            `[HttpServer] Request body incomplete (${bodyBytes}/${contentLength} bytes) - returning 400 rather than parsing a truncated body`,
+            "error",
+          );
+          try {
+            const truncatedBody = JSON.stringify({
+              error: "Incomplete request body",
+              expected: contentLength,
+              received: bodyBytes,
+            });
+            const truncatedHeaders = this.buildHttpHeaders(
+              {
+                status: 400,
+                statusText: "Bad Request",
+                headers: { "Content-Type": "application/json; charset=utf-8" },
+              },
+              false,
+            ) + `Content-Length: ${getByteLength(truncatedBody)}\r\n\r\n`;
+            output.write(truncatedHeaders, truncatedHeaders.length);
+            writeStringToStream(output, truncatedBody);
+            output.flush();
+          } catch (e) {
+            ztoolkit.log(`[HttpServer] Error sending 400 for truncated body: ${e}`, "error");
+          }
+          return;
+        }
+
+        const requestLine = headerText.split("\r\n")[0];
         ztoolkit.log(
-          `[HttpServer] Received request: ${requestLine} (${requestText.length} bytes)`,
+          `[HttpServer] Received request: ${requestLine} (${totalBytesRead} bytes)`,
         );
 
         // 验证请求格式
         if (!requestLine || !requestLine.includes("HTTP/")) {
           ztoolkit.log(
-            `[HttpServer] Invalid request format - RequestLine: "${requestLine || '<empty>'}", TotalBytes: ${totalBytesRead}, RequestLength: ${requestText.length}, RequestPreview: "${requestText.substring(0, 100).replace(/\r?\n/g, '\\n')}"`,
+            `[HttpServer] Invalid request format - RequestLine: "${requestLine || '<empty>'}", TotalBytes: ${totalBytesRead}, HeaderLength: ${headerText.length}, RequestPreview: "${headerText.substring(0, 100).replace(/\r?\n/g, '\\n')}"`,
             "error",
           );
           try {
@@ -528,35 +385,47 @@ export class HttpServer {
           const query = new URLSearchParams(url.search);
           const path = url.pathname;
           
-          // 提取POST请求的body
-          let requestBody = "";
-          if (method === "POST") {
-            const bodyStart = requestText.indexOf("\r\n\r\n");
-            if (bodyStart !== -1) {
-              const rawBody = requestText.substring(bodyStart + 4);
-
-              // Only consume the current request body. Extra bytes may belong to
-              // a pipelined next request on the same socket.
-              if (contentLength > 0) {
-                requestBody = sliceByUtf8Bytes(rawBody, contentLength);
-                const rawBodyBytes = getByteLength(rawBody);
-                if (rawBodyBytes > contentLength) {
-                  ztoolkit.log(
-                    `[HttpServer] Detected trailing bytes after request body (${rawBodyBytes - contentLength} bytes), ignoring extra data for this request`,
-                    "warn",
-                  );
-                }
-              } else {
-                requestBody = rawBody;
-              }
+          // The body was already framed at exactly Content-Length bytes and
+          // UTF-8 decoded once, on a complete buffer.
+          const requestBody = method === "POST" ? read.body : "";
+          const mcpHeaders: Record<string, string> = {};
+          for (const line of headerText.split(/\r?\n/).slice(1)) {
+            const colon = line.indexOf(':');
+            if (colon > 0) {
+              mcpHeaders[line.slice(0, colon).trim().toLowerCase()] = line.slice(colon + 1).trim();
             }
           }
 
-          // Extract existing session ID or create new one for MCP requests
+          // Block browser-origin DNS rebinding against a local Zotero server.
+          if (path === "/mcp" && mcpHeaders['origin']) {
+            let allowedOrigin = false;
+            try {
+              const origin = new URL(mcpHeaders['origin']);
+              allowedOrigin = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
+            } catch { /* invalid Origin is forbidden */ }
+            if (!allowedOrigin) {
+              const denied = { status: 403, statusText: 'Forbidden', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Untrusted Origin' }) };
+              const h = this.buildHttpHeaders(denied, false) + `Content-Length: ${getByteLength(denied.body)}\r\n\r\n`;
+              output.write(h, h.length);
+              writeStringToStream(output, denied.body);
+              return;
+            }
+          }
+
+          // Extract existing session ID or create new one for MCP requests.
+          // Matched against headers only - a body must never be able to
+          // supply a header value.
           let sessionId: string | undefined;
-          const mcpSessionHeader = requestText.match(/Mcp-Session-Id:\s*([^\r\n]+)/i);
+          const mcpSessionHeader = headerText.match(/Mcp-Session-Id:\s*([^\r\n]+)/i);
           
-          if (path === "/mcp" || (path.startsWith("/mcp/") && !path.includes(".well-known"))) {
+          // Modern MCP has no transport session IDs. Retain them only for
+          // existing handshake-based clients.
+          let modernRequest = mcpHeaders['mcp-protocol-version'] === StreamableMCPServer.MODERN_VERSION;
+          if (requestBody) {
+            try { modernRequest = isModernMCPRequest(JSON.parse(requestBody), mcpHeaders); }
+            catch { /* malformed JSON is handled by the MCP dispatcher */ }
+          }
+          if (!modernRequest && (path === "/mcp" || (path.startsWith("/mcp/") && !path.includes(".well-known")))) {
             if (mcpSessionHeader && mcpSessionHeader[1]) {
               sessionId = mcpSessionHeader[1].trim();
               this.updateSessionActivity(sessionId);
@@ -572,7 +441,7 @@ export class HttpServer {
           }
 
           // Determine if connection should be kept alive
-          const keepAlive = this.shouldKeepAlive(requestText, path);
+          const keepAlive = this.shouldKeepAlive(headerText, path);
           ztoolkit.log(`[HttpServer] Keep-alive for ${path}: ${keepAlive}`);
 
           let result;
@@ -581,7 +450,7 @@ export class HttpServer {
             if (method === "POST") {
               // Handle MCP requests via streamable HTTP
               if (this.mcpServer) {
-                result = await this.mcpServer.handleMCPRequest(requestBody);
+                result = await this.mcpServer.handleMCPRequest(requestBody, mcpHeaders);
               } else {
                 result = {
                   status: 503,
@@ -591,24 +460,15 @@ export class HttpServer {
                 };
               }
             } else if (method === "GET") {
-              // Handle GET request to MCP endpoint - show endpoint info
+              // MCP 2026-07-28 removes the GET transport endpoint; diagnostics
+              // remain available on /mcp/status and /mcp/capabilities.
               result = {
-                status: 200,
-                statusText: "OK",
+                status: 405,
+                statusText: "Method Not Allowed",
                 headers: { "Content-Type": "application/json; charset=utf-8" },
                 body: JSON.stringify({
                   endpoint: "/mcp",
-                  protocol: "MCP (Model Context Protocol)",
-                  transport: "Streamable HTTP",
-                  version: "2024-11-05",
-                  description: "This endpoint accepts MCP protocol requests via POST method",
-                  usage: {
-                    method: "POST",
-                    contentType: "application/json",
-                    body: "MCP JSON-RPC 2.0 formatted requests"
-                  },
-                  status: this.mcpServer ? "available" : "disabled",
-                  documentation: "Send POST requests with MCP protocol messages to interact with Zotero data"
+                  error: "MCP transport requires POST; use GET /mcp/status for diagnostics"
                 }),
               };
             } else {
@@ -617,10 +477,10 @@ export class HttpServer {
                 statusText: "Method Not Allowed",
                 headers: { 
                   "Content-Type": "application/json; charset=utf-8",
-                  "Allow": "GET, POST"
+                  "Allow": "POST"
                 },
                 body: JSON.stringify({ 
-                  error: `Method ${method} not allowed. Use GET for info or POST for MCP requests.` 
+                  error: `Method ${method} not allowed. Use POST for MCP requests.`
                 }),
               };
             }
@@ -802,15 +662,16 @@ private getCapabilities() {
   return {
     serverInfo: {
       name: "Zotero MCP Plugin",
-      version: "1.1.0",
+      version: "1.6.1",
       description: "Model Context Protocol integration for Zotero research management",
       author: "Zotero MCP Team",
-      repository: "https://github.com/zotero/zotero-mcp",
-      documentation: "https://github.com/zotero/zotero-mcp/blob/main/README.md"
+      repository: "https://github.com/UnlastingR/zotero-mcp",
+      documentation: "https://github.com/UnlastingR/zotero-mcp/blob/main/README.md"
     },
     protocols: {
       mcp: {
-        version: "2024-11-05",
+        version: StreamableMCPServer.MODERN_VERSION,
+        supportedVersions: [StreamableMCPServer.MODERN_VERSION, ...StreamableMCPServer.LEGACY_VERSIONS],
         transport: "streamable-http",
         endpoint: "/mcp",
         description: "Full MCP protocol support for AI clients"

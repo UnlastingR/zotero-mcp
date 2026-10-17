@@ -18,7 +18,6 @@ yarn-error.log*
 dist/
 build/
 *.tsbuildinfo
-.github/workflows
 # Temporary files
 *.tmp
 *.temp
@@ -47,5 +46,4 @@ logs/
 docs/
 
 # Zotero plugin specific
-zotero-mcp-plugin/addon/
 zotero-mcp-plugin/build/

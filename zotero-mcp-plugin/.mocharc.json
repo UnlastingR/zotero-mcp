@@ -1,0 +1,4 @@
+{
+  "spec": ["test/httpRequestReader.test.ts", "test/mcpProtocol.test.ts"],
+  "node-option": ["experimental-strip-types", "no-warnings"]
+}

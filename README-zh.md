@@ -6,7 +6,7 @@ _This README is also available in: [:gb: English](./README.md) | :cn: 简体中�
 [![zotero target version](https://img.shields.io/badge/Zotero-7-green?style=flat-square&logo=zotero&logoColor=CC2936)](https://www.zotero.org)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org)
-[![Version](https://img.shields.io/badge/Version-1.5.0-brightgreen)]()
+[![Version](https://img.shields.io/badge/Version-1.6.0-brightgreen)]()
 [![EN doc](https://img.shields.io/badge/Document-English-blue.svg)](README.md)
 [![中文文档](https://img.shields.io/badge/文档-中文-blue.svg)](README-zh.md)
 
@@ -44,6 +44,10 @@ AI 客户端 ↔ Streamable HTTP ↔ Zotero 插件（集成 MCP 服务器）
 ```
 
 这种设计消除了对单独 MCP 服务器进程的需求，提供了更加简化和高效的集成方式。
+
+**1.6.1 协议兼容说明**：`/mcp` 支持 2026-07-28 无状态 Streamable HTTP（`server/discover`、逐请求 `_meta` 与 `Mcp-Method` / `Mcp-Name` 头），也保留旧客户端所需的 `initialize` 握手。健康信息请访问 `/mcp/status`，不要把 `/mcp` 的 GET 请求当作 MCP 连接测试。
+
+**Embedding 服务商设置**：服务商选择会单独持久化，不再只根据接口地址反推。使用 Sub2API 等兼容 OpenAI Embeddings 的自定义网关时，选择 Google、OpenAI 等服务商不会覆盖已有的自定义 API Base 或当前模型；如需改用官方地址，请在 API Base 输入框中手动填写。切换到不兼容的嵌入模型后必须重建语义索引，升级插件本身不会自动重建。
 
 ---
 
@@ -312,7 +316,7 @@ MCP 服务器已集成在插件内，位于 `src/modules/streamableMCPServer.ts`
 
 ## 🔧 API 参考（MCP 工具列表）
 
-插件集成的 MCP 服务器提供以下 **20 个工具**，分为 5 大类：
+插件集成的 MCP 服务器提供以下 **29 个工具**，分为 5 大类：
 
 ### 一、搜索与查询（7 个）
 
@@ -420,7 +424,7 @@ MCP 服务器已集成在插件内，位于 `src/modules/streamableMCPServer.ts`
 | `itemKeys` | string[] | 指定条目（get 操作） |
 | `limit` | number | 最大结果数 |
 
-### 五、写入操作（4 个，可在偏好设置中禁用）
+### 五、写入操作（6 个，可在偏好设置中禁用）
 
 #### `write_note`
 创建或修改 Zotero 笔记，支持 Markdown 自动转换为 HTML。
@@ -452,17 +456,42 @@ MCP 服务器已集成在插件内，位于 `src/modules/streamableMCPServer.ts`
 | `creators` | array | 替换作者列表，每项包含 creatorType/firstName/lastName 或 name |
 
 #### `write_item`
-创建新的文献条目或重新关联附件。
+创建新的文献条目、重新关联附件，或将本地文件导入为附件。
 
 | 参数 | 类型 | 描述 |
 |---|---|---|
-| `action` | string | **必需**：create（创建条目）/reparent（移动附件） |
+| `action` | string | **必需**：create（创建条目）/reparent（移动附件）/import（导入本地文件） |
 | `itemType` | string | 条目类型（journalArticle/book/conferencePaper/thesis 等） |
 | `fields` | object | 元数据字段 |
 | `creators` | array | 作者列表 |
 | `tags` | string[] | 标签 |
 | `attachmentKeys` | string[] | 要关联的独立附件 Key 列表 |
-| `parentKey` | string | reparent 操作的目标父条目 Key |
+| `parentKey` | string | reparent 操作的目标父条目 Key（import 亦可用） |
+| `filePath` | string | import 操作：要导入文件的本地绝对路径 |
+| `parentItemKey` | string | import 操作：目标父条目 Key |
+| `title` | string | import 操作：附件显示标题（默认为文件名） |
+| `linkMode` | string | import 操作：`imported_file`（默认，复制进 Zotero 存储）或 `linked_file`（链接原文件不复制；仅限个人文库，若设置了链接附件根目录则按相对路径存储） |
+
+#### `add_by_identifier`
+通过标识符导入文献（DOI、arXiv、ISBN、PMID、ADS bibcode），走 Zotero 原生解析管线（与桌面端"魔杖"相同），自动获取 translator 元数据和附件。
+
+| 参数 | 类型 | 描述 |
+|---|---|---|
+| `identifiers` | string | **必需**，一个或多个标识符（换行/逗号分隔） |
+| `libraryID` | number | 目标文库（默认个人文库） |
+| `collectionKey` | string | 导入到指定分类 |
+| `saveAttachments` | boolean | 是否自动下载附件（默认 true） |
+| `duplicates` / `titleDuplicates` | string | 重复处理策略（flag/skip/off） |
+| `dryRun` | boolean | 仅解析标识符不导入 |
+| `async` / `jobID` | - | 大批量后台任务与轮询 |
+
+#### `trash_item`
+将一个或多个条目移入 Zotero 回收站。条目可在回收站中恢复，直到用户清空回收站；不支持永久删除（传入 `permanent` 会被拒绝）。
+
+| 参数 | 类型 | 描述 |
+|---|---|---|
+| `itemKeys` | string[] | **必需**，要移入回收站的条目 Key 列表（自动去重） |
+| `libraryID` | number | 目标文库（默认个人文库） |
 
 ---
 
