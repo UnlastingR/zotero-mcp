@@ -45,6 +45,10 @@ AI 客户端 ↔ Streamable HTTP ↔ Zotero 插件（集成 MCP 服务器）
 
 这种设计消除了对单独 MCP 服务器进程的需求，提供了更加简化和高效的集成方式。
 
+**1.6.1 协议兼容说明**：`/mcp` 支持 2026-07-28 无状态 Streamable HTTP（`server/discover`、逐请求 `_meta` 与 `Mcp-Method` / `Mcp-Name` 头），也保留旧客户端所需的 `initialize` 握手。健康信息请访问 `/mcp/status`，不要把 `/mcp` 的 GET 请求当作 MCP 连接测试。
+
+**Embedding 服务商设置**：服务商选择会单独持久化，不再只根据接口地址反推。使用 Sub2API 等兼容 OpenAI Embeddings 的自定义网关时，选择 Google、OpenAI 等服务商不会覆盖已有的自定义 API Base 或当前模型；如需改用官方地址，请在 API Base 输入框中手动填写。切换到不兼容的嵌入模型后必须重建语义索引，升级插件本身不会自动重建。
+
 ---
 
 ## 🚀 快速上手指南

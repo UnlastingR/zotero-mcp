@@ -18,6 +18,10 @@ import {
   handleRemoveItemsFromCollection,
 } from './apiHandlers';
 import { UnifiedContentExtractor } from './unifiedContentExtractor';
+import {
+  MODERN_MCP_VERSION, LEGACY_MCP_VERSIONS,
+  isModernMCPRequest, validateModernMCPRequest,
+} from './mcpProtocol';
 import { SmartAnnotationExtractor } from './smartAnnotationExtractor';
 import { MCPSettingsService } from './mcpSettingsService';
 import { getSemanticSearchService, SemanticSearchService } from './semantic';
@@ -33,6 +37,7 @@ export interface MCPRequest {
   id?: string | number | null;
   method: string;
   params?: any;
+  _meta?: Record<string, any>;
 }
 
 
@@ -65,10 +70,12 @@ export interface MCPNotification {
  * Architecture: AI Client (streamable HTTP) ↔ Zotero Plugin (integrated MCP server)
  */
 export class StreamableMCPServer {
+  public static readonly MODERN_VERSION = MODERN_MCP_VERSION;
+  public static readonly LEGACY_VERSIONS = LEGACY_MCP_VERSIONS;
   private isInitialized: boolean = false;
   private serverInfo = {
     name: 'zotero-integrated-mcp',
-    version: '1.1.0',
+    version: '1.6.1',
   };
   private clientSessions: Map<string, { initTime: Date; lastActivity: Date; clientInfo?: any }> = new Map();
 
@@ -79,7 +86,7 @@ export class StreamableMCPServer {
   /**
    * Handle incoming MCP requests and return HTTP response
    */
-  async handleMCPRequest(requestBody: string): Promise<{ status: number; statusText: string; headers: any; body: string }> {
+  async handleMCPRequest(requestBody: string, httpHeaders: Record<string, string> = {}): Promise<{ status: number; statusText: string; headers: any; body: string }> {
     let parsedRequest: unknown;
 
     try {
@@ -126,6 +133,9 @@ export class StreamableMCPServer {
       }
 
       const request = parsedRequest as MCPRequest;
+      if (request.jsonrpc !== '2.0') {
+        return this.httpError(this.createError(request.id ?? null, -32600, 'Invalid JSON-RPC version'));
+      }
       if (typeof request.method !== 'string' || !request.method.trim()) {
         const invalidRequest = this.createError(null, -32600, 'Invalid Request: method is required');
         return {
@@ -138,7 +148,16 @@ export class StreamableMCPServer {
 
       ztoolkit.log(`[StreamableMCP] Received: ${request.method}`);
 
-      const response = await this.processRequest(request);
+      const isModern = isModernMCPRequest(request, httpHeaders);
+      if (isModern) {
+        const envelopeError = validateModernMCPRequest(request, httpHeaders);
+        if (envelopeError) {
+          return this.httpError(this.createError(request.id ?? null,
+            envelopeError.code, envelopeError.message, envelopeError.data));
+        }
+      }
+
+      const response = await this.processRequest(request, isModern);
 
       if (response === null) {
         return {
@@ -147,6 +166,21 @@ export class StreamableMCPServer {
           headers: { "Content-Type": "application/json; charset=utf-8" },
           body: ''
         };
+      }
+
+      if (isModern && response.result && typeof response.result === 'object') {
+        response.result = {
+          ...response.result,
+          resultType: 'complete',
+          _meta: {
+            ...response.result._meta,
+            'io.modelcontextprotocol/serverInfo': this.serverInfo,
+          },
+        };
+        if (['tools/list', 'resources/list', 'prompts/list', 'server/discover'].includes(request.method)) {
+          response.result.ttlMs = 30000;
+          response.result.cacheScope = 'private';
+        }
       }
 
       const status = this.getHttpStatusForResponse(response);
@@ -178,10 +212,19 @@ export class StreamableMCPServer {
     }
   }
 
+  private httpError(error: MCPResponse) {
+    return {
+      status: 400,
+      statusText: 'Bad Request',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(error),
+    };
+  }
+
   /**
    * Process individual MCP requests
    */
-  private async processRequest(request: MCPRequest): Promise<MCPResponse | null> {
+  private async processRequest(request: MCPRequest, isModern = false): Promise<MCPResponse | null> {
     const isNotification = this.isNotificationRequest(request);
 
     if (isNotification) {
@@ -202,7 +245,14 @@ export class StreamableMCPServer {
 
     try {
       switch (request.method) {
+        case 'server/discover':
+          return isModern ? this.createResponse(request.id ?? null, {
+            supportedVersions: [StreamableMCPServer.MODERN_VERSION, ...StreamableMCPServer.LEGACY_VERSIONS],
+            capabilities: { tools: { listChanged: false } },
+          }) : this.createError(request.id ?? null, -32601, 'Method not found: server/discover');
+
         case 'initialize':
+          if (isModern) return this.createError(request.id ?? null, -32601, 'initialize is not supported by the stateless protocol');
           return this.handleInitialize(request);
 
         case 'initialized':
@@ -224,6 +274,7 @@ export class StreamableMCPServer {
           return this.handlePromptsList(request);
 
         case 'ping':
+          if (isModern) return this.createError(request.id ?? null, -32601, 'Method not found: ping');
           return this.handlePing(request);
 
         default:
@@ -251,11 +302,10 @@ export class StreamableMCPServer {
     
     // Create standard MCP initialize response (no custom fields)
     return this.createResponse(request.id ?? null, {
-      protocolVersion: '2024-11-05',
+      protocolVersion: StreamableMCPServer.LEGACY_VERSIONS.includes(request.params?.protocolVersion)
+        ? request.params.protocolVersion : '2025-11-25',
       capabilities: {
-        tools: {
-          listChanged: true,
-        },
+        tools: { listChanged: false },
         logging: {},
         prompts: {},
         resources: {},
@@ -289,7 +339,7 @@ export class StreamableMCPServer {
     }
 
     // Align transport status for structural request errors.
-    if (response.error.code === -32600 || response.error.code === -32700) {
+    if ([-32600, -32700, -32022, -32020].includes(response.error.code)) {
       return 400;
     }
 
@@ -3296,8 +3346,10 @@ export class StreamableMCPServer {
     return {
       isInitialized: this.isInitialized,
       serverInfo: this.serverInfo,
-      protocolVersion: '2024-11-05',
+      protocolVersion: StreamableMCPServer.MODERN_VERSION,
+      supportedProtocolVersions: [StreamableMCPServer.MODERN_VERSION, ...StreamableMCPServer.LEGACY_VERSIONS],
       supportedMethods: [
+        'server/discover',
         'initialize',
         'initialized', 
         'notifications/initialized',

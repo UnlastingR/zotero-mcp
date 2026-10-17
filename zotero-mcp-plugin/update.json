@@ -241,6 +241,16 @@
               "strict_max_version": "10.99.99"
             }
           }
+        },
+        {
+          "version": "1.6.1",
+          "update_link": "https://github.com/UnlastingR/zotero-mcp/releases/download/v1.6.1/zotero-mcp-plugin-1.6.1.xpi",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "6.999",
+              "strict_max_version": "10.99.99"
+            }
+          }
         }
       ]
     }

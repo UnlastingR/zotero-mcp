@@ -1,0 +1,36 @@
+name: Zotero MCP CI
+
+on:
+  push:
+    branches: [main, 'fix/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zotero-mcp-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: zotero-mcp-plugin/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run unit tests
+        run: npm run test:unit
+      - name: Build and typecheck plugin
+        run: npm run build
+      - name: Save installable plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: zotero-mcp-plugin
+          path: zotero-mcp-plugin/.scaffold/build/*.xpi
+          if-no-files-found: error

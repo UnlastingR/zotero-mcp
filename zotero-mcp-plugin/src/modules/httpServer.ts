@@ -1,4 +1,5 @@
 import { StreamableMCPServer } from "./streamableMCPServer";
+import { isModernMCPRequest } from "./mcpProtocol";
 import { serverPreferences } from "./serverPreferences";
 import { testMCPIntegration } from "./mcpTest";
 import {
@@ -387,6 +388,29 @@ export class HttpServer {
           // The body was already framed at exactly Content-Length bytes and
           // UTF-8 decoded once, on a complete buffer.
           const requestBody = method === "POST" ? read.body : "";
+          const mcpHeaders: Record<string, string> = {};
+          for (const line of headerText.split(/\r?\n/).slice(1)) {
+            const colon = line.indexOf(':');
+            if (colon > 0) {
+              mcpHeaders[line.slice(0, colon).trim().toLowerCase()] = line.slice(colon + 1).trim();
+            }
+          }
+
+          // Block browser-origin DNS rebinding against a local Zotero server.
+          if (path === "/mcp" && mcpHeaders['origin']) {
+            let allowedOrigin = false;
+            try {
+              const origin = new URL(mcpHeaders['origin']);
+              allowedOrigin = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
+            } catch { /* invalid Origin is forbidden */ }
+            if (!allowedOrigin) {
+              const denied = { status: 403, statusText: 'Forbidden', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Untrusted Origin' }) };
+              const h = this.buildHttpHeaders(denied, false) + `Content-Length: ${getByteLength(denied.body)}\r\n\r\n`;
+              output.write(h, h.length);
+              writeStringToStream(output, denied.body);
+              return;
+            }
+          }
 
           // Extract existing session ID or create new one for MCP requests.
           // Matched against headers only - a body must never be able to
@@ -394,7 +418,14 @@ export class HttpServer {
           let sessionId: string | undefined;
           const mcpSessionHeader = headerText.match(/Mcp-Session-Id:\s*([^\r\n]+)/i);
           
-          if (path === "/mcp" || (path.startsWith("/mcp/") && !path.includes(".well-known"))) {
+          // Modern MCP has no transport session IDs. Retain them only for
+          // existing handshake-based clients.
+          let modernRequest = mcpHeaders['mcp-protocol-version'] === StreamableMCPServer.MODERN_VERSION;
+          if (requestBody) {
+            try { modernRequest = isModernMCPRequest(JSON.parse(requestBody), mcpHeaders); }
+            catch { /* malformed JSON is handled by the MCP dispatcher */ }
+          }
+          if (!modernRequest && (path === "/mcp" || (path.startsWith("/mcp/") && !path.includes(".well-known")))) {
             if (mcpSessionHeader && mcpSessionHeader[1]) {
               sessionId = mcpSessionHeader[1].trim();
               this.updateSessionActivity(sessionId);
@@ -419,7 +450,7 @@ export class HttpServer {
             if (method === "POST") {
               // Handle MCP requests via streamable HTTP
               if (this.mcpServer) {
-                result = await this.mcpServer.handleMCPRequest(requestBody);
+                result = await this.mcpServer.handleMCPRequest(requestBody, mcpHeaders);
               } else {
                 result = {
                   status: 503,
@@ -429,24 +460,15 @@ export class HttpServer {
                 };
               }
             } else if (method === "GET") {
-              // Handle GET request to MCP endpoint - show endpoint info
+              // MCP 2026-07-28 removes the GET transport endpoint; diagnostics
+              // remain available on /mcp/status and /mcp/capabilities.
               result = {
-                status: 200,
-                statusText: "OK",
+                status: 405,
+                statusText: "Method Not Allowed",
                 headers: { "Content-Type": "application/json; charset=utf-8" },
                 body: JSON.stringify({
                   endpoint: "/mcp",
-                  protocol: "MCP (Model Context Protocol)",
-                  transport: "Streamable HTTP",
-                  version: "2024-11-05",
-                  description: "This endpoint accepts MCP protocol requests via POST method",
-                  usage: {
-                    method: "POST",
-                    contentType: "application/json",
-                    body: "MCP JSON-RPC 2.0 formatted requests"
-                  },
-                  status: this.mcpServer ? "available" : "disabled",
-                  documentation: "Send POST requests with MCP protocol messages to interact with Zotero data"
+                  error: "MCP transport requires POST; use GET /mcp/status for diagnostics"
                 }),
               };
             } else {
@@ -455,10 +477,10 @@ export class HttpServer {
                 statusText: "Method Not Allowed",
                 headers: { 
                   "Content-Type": "application/json; charset=utf-8",
-                  "Allow": "GET, POST"
+                  "Allow": "POST"
                 },
                 body: JSON.stringify({ 
-                  error: `Method ${method} not allowed. Use GET for info or POST for MCP requests.` 
+                  error: `Method ${method} not allowed. Use POST for MCP requests.`
                 }),
               };
             }
@@ -640,15 +662,16 @@ private getCapabilities() {
   return {
     serverInfo: {
       name: "Zotero MCP Plugin",
-      version: "1.1.0",
+      version: "1.6.1",
       description: "Model Context Protocol integration for Zotero research management",
       author: "Zotero MCP Team",
-      repository: "https://github.com/zotero/zotero-mcp",
-      documentation: "https://github.com/zotero/zotero-mcp/blob/main/README.md"
+      repository: "https://github.com/UnlastingR/zotero-mcp",
+      documentation: "https://github.com/UnlastingR/zotero-mcp/blob/main/README.md"
     },
     protocols: {
       mcp: {
-        version: "2024-11-05",
+        version: StreamableMCPServer.MODERN_VERSION,
+        supportedVersions: [StreamableMCPServer.MODERN_VERSION, ...StreamableMCPServer.LEGACY_VERSIONS],
         transport: "streamable-http",
         endpoint: "/mcp",
         description: "Full MCP protocol support for AI clients"

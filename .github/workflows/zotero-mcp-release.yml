@@ -1,0 +1,41 @@
+name: Zotero MCP Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: zotero-mcp-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: zotero-mcp-plugin/package-lock.json
+      - name: Validate version matches tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node -e "if ('v' + require('./package.json').version !== process.env.RELEASE_TAG) process.exit(1)"
+      - run: npm ci
+      - run: npm run test:unit
+      - run: npm run build
+      - name: Publish verified package and update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cp .scaffold/build/zotero-mcp-plugin.xpi "zotero-mcp-plugin-${RELEASE_TAG#v}.xpi"
+          gh release create "$RELEASE_TAG" \
+            "zotero-mcp-plugin-${RELEASE_TAG#v}.xpi" \
+            update.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TAG" \
+            --notes 'MCP 2026-07-28 compatibility, provider selection persistence, upstream 1.6.0 updates.'

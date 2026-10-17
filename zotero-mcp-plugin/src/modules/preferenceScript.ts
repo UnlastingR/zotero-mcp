@@ -430,7 +430,7 @@ const EMBEDDING_PROVIDER_PRESETS: Record<string, { apiBase: string; modelPlaceho
   },
   google: {
     apiBase: "https://generativelanguage.googleapis.com/v1beta/openai",
-    modelPlaceholder: "gemini-embedding-001",
+    modelPlaceholder: "gemini-embedding-2",
     needsApiKey: true
   },
   alibaba: {
@@ -455,7 +455,7 @@ const EMBEDDING_PROVIDER_PRESETS: Record<string, { apiBase: string; modelPlaceho
   },
   voyage: {
     apiBase: "https://api.voyageai.com/v1",
-    modelPlaceholder: "voyage-3-lite",
+    modelPlaceholder: "voyage-4-lite",
     needsApiKey: true
   },
   ollama: {
@@ -479,11 +479,20 @@ function bindEmbeddingSettings(doc: Document) {
   const testButton = doc?.querySelector("#test-embedding-button") as HTMLButtonElement;
   const testResult = doc?.querySelector("#embedding-test-result") as HTMLSpanElement;
 
-  // Detect current provider from saved apiBase
+  const providerPref = "extensions.zotero.zotero-mcp-plugin.embedding.provider";
+
+  // Old installations did not persist the provider. Infer it only once from
+  // the official hostname, then preserve the user's explicit selection.
   const detectProvider = (apiBase: string): string => {
+    let hostname = "";
+    try {
+      hostname = new URL(apiBase).hostname.toLowerCase();
+    } catch {
+      return "custom";
+    }
     for (const [key, preset] of Object.entries(EMBEDDING_PROVIDER_PRESETS)) {
       try {
-        if (apiBase && apiBase.includes(new URL(preset.apiBase).hostname)) {
+        if (hostname === new URL(preset.apiBase).hostname.toLowerCase()) {
           return key;
         }
       } catch {
@@ -496,7 +505,10 @@ function bindEmbeddingSettings(doc: Document) {
   // Initialize provider select from saved apiBase
   if (providerSelect) {
     const savedApiBase = Zotero.Prefs.get("extensions.zotero.zotero-mcp-plugin.embedding.apiBase", true) as string;
-    providerSelect.value = detectProvider(savedApiBase || "");
+    const savedProvider = Zotero.Prefs.get(providerPref, true) as string | undefined;
+    providerSelect.value = savedProvider &&
+      (savedProvider === "custom" || EMBEDDING_PROVIDER_PRESETS[savedProvider])
+      ? savedProvider : detectProvider(savedApiBase || "");
   }
 
   // Initialize input values from preferences
@@ -582,13 +594,18 @@ function bindEmbeddingSettings(doc: Document) {
   if (providerSelect) {
     providerSelect.addEventListener("change", () => {
       const provider = providerSelect.value;
+      Zotero.Prefs.set(providerPref, provider, true);
       if (provider !== "custom" && EMBEDDING_PROVIDER_PRESETS[provider]) {
         const preset = EMBEDDING_PROVIDER_PRESETS[provider];
 
-        // Only fill in API Base URL
+        // Switching presets must not silently replace an existing custom
+        // gateway (e.g. Sub2API). The provider and endpoint are independent.
         if (apiBaseInput) {
-          apiBaseInput.value = preset.apiBase;
-          Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.embedding.apiBase", preset.apiBase, true);
+          const currentBase = apiBaseInput.value.trim();
+          if (!currentBase || detectProvider(currentBase) !== "custom") {
+            apiBaseInput.value = preset.apiBase;
+            Zotero.Prefs.set("extensions.zotero.zotero-mcp-plugin.embedding.apiBase", preset.apiBase, true);
+          }
         }
 
         // Update model placeholder hint (don't change the value)
