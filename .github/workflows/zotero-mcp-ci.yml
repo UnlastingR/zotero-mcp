@@ -25,6 +25,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Run unit tests
+        # writeOperations.test.ts requires Zotero's live application runtime;
+        # it is not a standalone Node/Mocha unit test.
         run: npm run test:unit
       - name: Build and typecheck plugin
         run: npm run build
